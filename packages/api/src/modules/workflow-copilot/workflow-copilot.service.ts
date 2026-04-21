@@ -18,6 +18,7 @@ import {
   workflowCopilotEnsureThreadSchema,
   workflowCopilotSendMessageSchema,
   workflowCopilotThreadPatchSchema,
+  type AgentCatalog,
   type AgentModelRef,
   type AgentKernelRecallEntry,
   type AgentType,
@@ -40,6 +41,7 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { readSessionWorkspace } from '../../common/utils/session-workspace.util';
 import { ActivityService } from '../activity/activity.service';
 import { AgentRecallService } from '../agents/agent-recall.service';
+import { AgentPolicyService } from '../agent-policy/agent-policy.service';
 import { AgentsService } from '../agents/agents.service';
 import { WorkflowControllerService } from '../agents/workflow-controller.service';
 import { WorkflowManagedFlowService } from '../agents/workflow-managed-flow.service';
@@ -174,6 +176,11 @@ export class WorkflowCopilotService {
       },
       cancelCopilotRun: async () => {},
     } as unknown as DaemonDispatchService,
+    // AgentPolicyService is injected by Nest in production; tests that build
+    // the service directly can skip it, in which case we fall back to the
+    // daemon catalog via `agents.listCatalogForPrompt()`.
+    @Optional()
+    private readonly agentPolicy?: AgentPolicyService,
   ) {}
 
   private async materializeCopilotEmbeddedFiles(
@@ -272,8 +279,46 @@ export class WorkflowCopilotService {
       applyMessage: this.applyMessage.bind(this),
       materializeSendMessageFileSummary: this.materializeSendMessageFileSummary.bind(this),
       runCopilotExecutions: this.runCopilotExecutions.bind(this),
+      loadRepairContext: this.loadRepairContext.bind(this),
       abortByThread: this.abortByThread,
     };
+  }
+
+  /**
+   * Snapshot of the inputs the repair detector needs to validate a turn:
+   *
+   *   - `catalog`: the same merged catalog that feeds the prompt, used to
+   *     reject `model` bindings that are not live. `null` when the daemon is
+   *     offline — in that case the detector defers to the prompt-side rules.
+   *   - `runnableTypes`: registered agent adapters from `@cepage/agent-core`.
+   *     Empty when the core import fails (e.g. in unit tests) and the
+   *     detector silently skips the corresponding check.
+   *
+   * Called once per `sendMessage` call so the repair loop does not re-hit
+   * `AgentPolicyService` / the daemon between retries.
+   */
+  private async loadRepairContext(): Promise<{
+    catalog: AgentCatalog | null;
+    runnableTypes: Set<AgentType>;
+  }> {
+    const catalog = await this.safeLoadCatalog();
+    const runnableTypes = await this.listRunnableAgentTypes();
+    return { catalog, runnableTypes };
+  }
+
+  private async safeLoadCatalog(): Promise<AgentCatalog | null> {
+    try {
+      if (this.agentPolicy) {
+        const prompt = await this.agentPolicy.getCatalogForPrompt();
+        return prompt?.catalog ?? null;
+      }
+      if (typeof (this.agents as { listCatalogForPrompt?: () => unknown }).listCatalogForPrompt === 'function') {
+        return await this.agents.listCatalogForPrompt();
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   private applyDeps() {
@@ -997,8 +1042,13 @@ export class WorkflowCopilotService {
     const relatedSkills = await this.readRelatedSkills(selectedSkill, threadDto);
     // Feed the merged agent catalog to the prompt so the LLM binds
     // model.providerID / model.modelID to real (catalog-listed) pairs instead
-    // of copy-pasting free-form user text (e.g. "minimax 2.7 high speed").
-    const availableModels = await this.agents.listCatalogForPrompt().catch(() => null);
+    // of copy-pasting free-form user text (e.g. "minimax 2.7 high speed"). The
+    // policy service wraps the catalog with free-text hints (3 levels) + an
+    // optional default triple; when the DI container doesn't wire it (e.g.
+    // unit tests), we fall back to the raw catalog.
+    const availableModels = this.agentPolicy
+      ? await this.agentPolicy.getCatalogForPrompt().catch(() => null)
+      : await this.agents.listCatalogForPrompt().catch(() => null);
     const promptText = buildPrompt({
       sessionId: session.id,
       workingDirectory,

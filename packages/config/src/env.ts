@@ -31,6 +31,20 @@ const envSchema = z.object({
   // setups; we never authenticate the daemon protocol so only widen this on
   // trusted networks.
   DAEMON_TRUSTED_PEER_CIDRS: z.string().optional(),
+  // Agent-policy bootstrap is strictly opt-in. By default the API does NOT
+  // seed any policy or copilot default — the operator configures everything
+  // through the HTTP endpoints (PUT /agent-policy, PUT /copilot-settings).
+  //
+  // To opt in on first install (empty tables), either:
+  //   - set AGENT_POLICY_BOOTSTRAP_ENABLED=true to seed from the shipped JSON
+  //     at packages/api/config/agent-policy.defaults.json, OR
+  //   - set AGENT_POLICY_BOOTSTRAP_PATH=/abs/path/to/policy.json to seed from
+  //     a custom file (this flag implies opt-in; ENABLED is not required).
+  // Once either table has a row, both flags are ignored.
+  AGENT_POLICY_BOOTSTRAP_ENABLED: z
+    .enum(['1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'])
+    .optional(),
+  AGENT_POLICY_BOOTSTRAP_PATH: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

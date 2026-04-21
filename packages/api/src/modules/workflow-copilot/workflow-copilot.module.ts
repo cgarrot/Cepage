@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module';
+import { AgentPolicyModule } from '../agent-policy/agent-policy.module';
 import { AgentsModule } from '../agents/agents.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { GraphModule } from '../graph/graph.module';
@@ -8,7 +9,14 @@ import { WorkflowCopilotController } from './workflow-copilot.controller';
 import { WorkflowCopilotService } from './workflow-copilot.service';
 
 @Module({
-  imports: [GraphModule, ActivityModule, CollaborationModule, AgentsModule, WorkflowSkillsModule],
+  imports: [
+    GraphModule,
+    ActivityModule,
+    CollaborationModule,
+    AgentsModule,
+    AgentPolicyModule,
+    WorkflowSkillsModule,
+  ],
   controllers: [WorkflowCopilotController],
   providers: [WorkflowCopilotService],
   exports: [WorkflowCopilotService],

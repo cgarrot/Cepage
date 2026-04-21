@@ -571,3 +571,37 @@ model WorkflowCopilotCheckpoint {
   @@index([sessionId])
   @@index([threadId, createdAt])
 }
+
+// AgentPolicy: 3-level free-text hints ("when should the copilot pick this
+// agent/provider/model"), rendered into the workflow copilot prompt alongside
+// the daemon catalog so the LLM has real selection guidance. Uniqueness is
+// enforced per (level, agentType, providerID, modelID) tuple; rows at level
+// "agentType" leave providerID/modelID null, level "provider" leaves modelID
+// null, level "model" fills all three. Seeded from a shipped JSON on first
+// install (see AgentPolicyBootstrapService).
+model AgentPolicy {
+  id         String   @id @default(uuid())
+  level      String
+  agentType  String?
+  providerID String?
+  modelID    String?
+  hint       String
+  tags       String[] @default([])
+  priority   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([level, agentType, providerID, modelID])
+  @@index([level, agentType])
+}
+
+// CopilotSettings: singleton table (id fixed to "singleton") that stores the
+// optional default (agentType, providerID, modelID) triple the copilot should
+// pick when the user does not explicitly reference a model.
+model CopilotSettings {
+  id                String   @id @default("singleton")
+  defaultAgentType  String?
+  defaultProviderID String?
+  defaultModelID    String?
+  updatedAt         DateTime @updatedAt
+}

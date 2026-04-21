@@ -102,6 +102,101 @@ export const agentCatalogSchema = z.object({
 
 export type AgentCatalog = z.infer<typeof agentCatalogSchema>;
 
+export const agentPolicyLevelSchema = z.enum(['agentType', 'provider', 'model']);
+export type AgentPolicyLevel = z.infer<typeof agentPolicyLevelSchema>;
+
+// A single row of the AgentPolicy table: free-text guidance ("hint") pinned
+// at one of three granularities. Required keys depend on `level`:
+//   - level 'agentType': agentType must be set; providerID/modelID null
+//   - level 'provider':  agentType + providerID must be set; modelID null
+//   - level 'model':     agentType + providerID + modelID must be set
+export const agentPolicyEntrySchema = z
+  .object({
+    id: z.string().optional(),
+    level: agentPolicyLevelSchema,
+    agentType: agentTypeSchema.optional(),
+    providerID: z.string().min(1).optional(),
+    modelID: z.string().min(1).optional(),
+    hint: z.string().min(1),
+    tags: z.array(z.string().min(1)).default([]),
+    priority: z.number().int().default(0),
+  })
+  .superRefine((val, ctx) => {
+    if (!val.agentType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['agentType'],
+        message: 'agentType is required for every policy entry',
+      });
+    }
+    if (val.level === 'agentType') {
+      if (val.providerID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['providerID'],
+          message: 'providerID must be empty for level "agentType"',
+        });
+      }
+      if (val.modelID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['modelID'],
+          message: 'modelID must be empty for level "agentType"',
+        });
+      }
+    } else if (val.level === 'provider') {
+      if (!val.providerID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['providerID'],
+          message: 'providerID is required for level "provider"',
+        });
+      }
+      if (val.modelID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['modelID'],
+          message: 'modelID must be empty for level "provider"',
+        });
+      }
+    } else if (val.level === 'model') {
+      if (!val.providerID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['providerID'],
+          message: 'providerID is required for level "model"',
+        });
+      }
+      if (!val.modelID) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['modelID'],
+          message: 'modelID is required for level "model"',
+        });
+      }
+    }
+  });
+export type AgentPolicyEntry = z.infer<typeof agentPolicyEntrySchema>;
+
+// CopilotSettings.defaults — optional (agentType, providerID, modelID) triple
+// used as the prompt-time default when the user does not pin a specific model.
+export const copilotSettingsSchema = z.object({
+  defaultAgentType: agentTypeSchema.nullable().optional(),
+  defaultProviderID: z.string().min(1).nullable().optional(),
+  defaultModelID: z.string().min(1).nullable().optional(),
+});
+export type CopilotSettings = z.infer<typeof copilotSettingsSchema>;
+
+// Packaged shape consumed by the workflow copilot prompt builder: the merged
+// daemon catalog plus the policy hints and default triple. The prompt renders
+// hints inline with each catalog entry and flags the default with *DEFAULT.
+export const agentCatalogForPromptSchema = z.object({
+  catalog: agentCatalogSchema.nullable(),
+  policies: z.array(agentPolicyEntrySchema),
+  defaults: copilotSettingsSchema,
+});
+export type AgentCatalogForPrompt = z.infer<typeof agentCatalogForPromptSchema>;
+
 export interface AgentSpawnRequest {
   requestId?: string;
   type: AgentType;

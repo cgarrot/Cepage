@@ -3,7 +3,11 @@
 import type { ReactNode } from 'react';
 import { Badge, IconBranch, IconChevronDown, IconChevronRight, IconButton } from '@cepage/ui-kit';
 import { useState } from 'react';
-import type { ChatTimelineAgentOutput, ChatTimelineAgentStep } from '@cepage/state';
+import type {
+  ChatModelRef,
+  ChatTimelineAgentOutput,
+  ChatTimelineAgentStep,
+} from '@cepage/state';
 import { AgentBadge } from './AgentBadge';
 import { BlockShell } from './BlockShell';
 import { CodeBlockEnhanced } from './CodeBlockEnhanced';
@@ -13,6 +17,11 @@ type AgentStepBlockProps = {
   outputs?: ChatTimelineAgentOutput[];
   defaultOpen?: boolean;
   trailing?: ReactNode;
+  /**
+   * Runtime-effective model for this step's agent run. When different from
+   * the configured `step.model` the badge shows the strike + arrow pair.
+   */
+  callModel?: ChatModelRef;
 };
 
 const HEADER_STYLE = {
@@ -32,6 +41,7 @@ export function AgentStepBlock({
   outputs = [],
   defaultOpen,
   trailing,
+  callModel,
 }: AgentStepBlockProps) {
   const hasOutputs = outputs.length > 0;
   const [open, setOpen] = useState(defaultOpen ?? hasOutputs);
@@ -49,6 +59,7 @@ export function AgentStepBlock({
           actor={step.actor}
           {...(step.agentType ? { agentType: step.agentType } : {})}
           {...(step.model ? { model: step.model } : {})}
+          {...(callModel ? { callModel } : {})}
         />
         {step.role ? <Badge tone="neutral" outline>{step.role}</Badge> : null}
         {step.label ? <Badge tone="info" outline>{step.label}</Badge> : null}

@@ -1,8 +1,12 @@
 import type {
   AgentCatalog,
+  AgentCatalogForPrompt,
+  AgentCatalogModel,
   AgentCatalogProvider,
   AgentKernelRecallEntry,
+  AgentPolicyEntry,
   AgentToolsetId,
+  CopilotSettings,
   GraphNode,
   WorkflowSkill,
   WorkflowCopilotMessage,
@@ -64,27 +68,130 @@ function summarizeSkillCatalog(skills: readonly WorkflowSkill[]): string[] {
 
 const AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT = 60;
 
-function summarizeAgentCatalogProvider(provider: AgentCatalogProvider): string[] {
+interface PolicyIndex {
+  byAgentType: Map<string, AgentPolicyEntry[]>;
+  byProvider: Map<string, AgentPolicyEntry[]>;
+  byModel: Map<string, AgentPolicyEntry[]>;
+}
+
+function makePolicyIndex(policies: readonly AgentPolicyEntry[] | undefined): PolicyIndex {
+  const idx: PolicyIndex = {
+    byAgentType: new Map(),
+    byProvider: new Map(),
+    byModel: new Map(),
+  };
+  if (!policies) return idx;
+  const sorted = [...policies].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  for (const entry of sorted) {
+    if (!entry.agentType) continue;
+    if (entry.level === 'agentType') {
+      const arr = idx.byAgentType.get(entry.agentType) ?? [];
+      arr.push(entry);
+      idx.byAgentType.set(entry.agentType, arr);
+    } else if (entry.level === 'provider' && entry.providerID) {
+      const key = `${entry.agentType}::${entry.providerID}`;
+      const arr = idx.byProvider.get(key) ?? [];
+      arr.push(entry);
+      idx.byProvider.set(key, arr);
+    } else if (entry.level === 'model' && entry.providerID && entry.modelID) {
+      const key = `${entry.agentType}::${entry.providerID}::${entry.modelID}`;
+      const arr = idx.byModel.get(key) ?? [];
+      arr.push(entry);
+      idx.byModel.set(key, arr);
+    }
+  }
+  return idx;
+}
+
+function formatHintLines(prefix: string, entries: AgentPolicyEntry[] | undefined): string[] {
+  if (!entries || entries.length === 0) return [];
+  return entries.flatMap((entry) => {
+    const tags = entry.tags && entry.tags.length > 0 ? ` [${entry.tags.join(', ')}]` : '';
+    return [`${prefix}hint:${tags} ${entry.hint}`];
+  });
+}
+
+function isDefaultModel(
+  defaults: CopilotSettings | null | undefined,
+  agentType: string,
+  providerID: string,
+  modelID: string,
+): boolean {
+  if (!defaults) return false;
+  return (
+    defaults.defaultAgentType === agentType
+    && defaults.defaultProviderID === providerID
+    && defaults.defaultModelID === modelID
+  );
+}
+
+function summarizeAgentCatalogProvider(
+  provider: AgentCatalogProvider,
+  index: PolicyIndex,
+  defaults: CopilotSettings | null | undefined,
+): string[] {
   const header = `- agentType: ${provider.agentType} (${provider.label})${
     provider.availability === 'unavailable'
       ? ` — UNAVAILABLE${provider.unavailableReason ? ` (${provider.unavailableReason})` : ''}`
       : ''
   }`;
+  const agentTypeHintLines = formatHintLines(
+    '    agentType.',
+    index.byAgentType.get(provider.agentType),
+  );
+
   if (provider.models.length === 0) {
-    return [header, '    (no model advertised for this agentType)'];
+    return [
+      header,
+      ...agentTypeHintLines,
+      '    (no model advertised for this agentType)',
+    ];
   }
-  const lines = provider.models
-    .slice(0, AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT)
-    .map((model) => {
-      const mark = model.isDefault ? ' *default' : '';
-      return `    - providerID=${JSON.stringify(model.providerID)} modelID=${JSON.stringify(model.modelID)}${mark}`;
-    });
-  if (provider.models.length > AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT) {
-    lines.push(
-      `    - ... (${provider.models.length - AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT} more model(s) omitted)`,
+
+  // The LLM must emit `{ providerID, modelID }` where providerID matches the
+  // model-level providerID (not the parent catalog grouping). Group the
+  // models by their own providerID so provider-level hints attach to the
+  // correct key.
+  const byProviderID = new Map<string, AgentCatalogModel[]>();
+  for (const model of provider.models) {
+    const bucket = byProviderID.get(model.providerID) ?? [];
+    bucket.push(model);
+    byProviderID.set(model.providerID, bucket);
+  }
+
+  const providerBlocks = [...byProviderID.entries()].flatMap(([providerID, models]) => {
+    const providerKey = `${provider.agentType}::${providerID}`;
+    const providerLabel = `    providerID=${JSON.stringify(providerID)}`;
+    const providerHintLines = formatHintLines(
+      '      provider.',
+      index.byProvider.get(providerKey),
     );
-  }
-  return [header, ...lines];
+    const modelLines = models
+      .slice(0, AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT)
+      .flatMap((model) => {
+        const defaultMark = isDefaultModel(
+          defaults,
+          provider.agentType,
+          model.providerID,
+          model.modelID,
+        )
+          ? ' *DEFAULT'
+          : '';
+        const legacyDefaultMark = model.isDefault && !defaultMark ? ' *catalog-default' : '';
+        const line = `      - modelID=${JSON.stringify(model.modelID)}${defaultMark}${legacyDefaultMark}`;
+        const modelKey = `${provider.agentType}::${model.providerID}::${model.modelID}`;
+        const modelHintLines = formatHintLines('          model.', index.byModel.get(modelKey));
+        return [line, ...modelHintLines];
+      });
+    if (models.length > AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT) {
+      modelLines.push(
+        `      - ... (${models.length - AGENT_CATALOG_MODELS_PER_PROVIDER_LIMIT} more model(s) omitted)`,
+      );
+    }
+    return [providerLabel, ...providerHintLines, ...modelLines];
+  });
+
+  return [header, ...agentTypeHintLines, ...providerBlocks];
 }
 
 /**
@@ -105,14 +212,32 @@ function collectRunnableAgentTypes(catalog: AgentCatalog | null | undefined): st
   return [...seen].sort();
 }
 
-function summarizeAgentCatalog(catalog: AgentCatalog | null | undefined): string[] {
+function summarizeAgentCatalog(
+  catalog: AgentCatalog | null | undefined,
+  policies: readonly AgentPolicyEntry[] | undefined,
+  defaults: CopilotSettings | null | undefined,
+): string[] {
+  const index = makePolicyIndex(policies);
   if (!catalog || catalog.providers.length === 0) {
     return [
       '- Agent catalog is unavailable (daemon offline or no provider registered).',
       '- Keep the thread-selected provider/model and do NOT invent new model.providerID or model.modelID values in this turn.',
     ];
   }
-  return catalog.providers.flatMap((provider) => summarizeAgentCatalogProvider(provider));
+  return catalog.providers.flatMap((provider) =>
+    summarizeAgentCatalogProvider(provider, index, defaults),
+  );
+}
+
+function summarizeCopilotDefault(defaults: CopilotSettings | null | undefined): string {
+  if (
+    defaults?.defaultAgentType
+    && defaults.defaultProviderID
+    && defaults.defaultModelID
+  ) {
+    return `Copilot default model: ${defaults.defaultAgentType} / ${defaults.defaultProviderID} / ${defaults.defaultModelID}`;
+  }
+  return 'Copilot default model: (none configured — keep thread-selected model)';
 }
 
 function summarizeSelectedSkill(skill: WorkflowSkill | undefined): string[] {
@@ -175,7 +300,7 @@ export function buildPrompt(input: {
   recall?: AgentKernelRecallEntry[];
   toolset?: AgentToolsetId;
   availableSkills?: WorkflowSkill[];
-  availableModels?: AgentCatalog | null;
+  availableModels?: AgentCatalogForPrompt | AgentCatalog | null;
   selectedSkill?: WorkflowSkill;
   selectedSkillPrompt?: string;
 }): string {
@@ -221,7 +346,16 @@ export function buildPrompt(input: {
   const agentLabel = formatAgentSelectionLabel(input.thread.agentType, input.thread.model);
   const askMode = input.thread.mode === 'ask';
   const concierge = input.thread.metadata?.role === 'concierge';
-  const runnableAgentTypes = collectRunnableAgentTypes(input.availableModels ?? null);
+  // Accept both the legacy `AgentCatalog | null` and the new
+  // `AgentCatalogForPrompt` wrapper so callers can migrate incrementally; at
+  // this level we always work with the { catalog, policies, defaults } triple.
+  const promptCatalog: AgentCatalogForPrompt | null = (() => {
+    const raw = input.availableModels ?? null;
+    if (!raw) return null;
+    if ('catalog' in raw) return raw;
+    return { catalog: raw, policies: [], defaults: {} };
+  })();
+  const runnableAgentTypes = collectRunnableAgentTypes(promptCatalog?.catalog ?? null);
   const runnableAgentTypesHint =
     runnableAgentTypes.length > 0
       ? `runnable agent adapters (from the catalog above): ${runnableAgentTypes.map((t) => `"${t}"`).join(', ')}`
@@ -376,7 +510,13 @@ export function buildPrompt(input: {
     }`,
     '',
     'Available agent providers/models (source of truth for model binding):',
-    ...summarizeAgentCatalog(input.availableModels ?? null),
+    ...summarizeAgentCatalog(
+      promptCatalog?.catalog ?? null,
+      promptCatalog?.policies,
+      promptCatalog?.defaults,
+    ),
+    '',
+    summarizeCopilotDefault(promptCatalog?.defaults),
     '',
     'Durable recall for this turn:',
     ...summarizeRecall(recall),
@@ -502,6 +642,10 @@ export function buildPrompt(input: {
     '- If the user describes a model in free text (e.g. "utilise opencode minimax 2.7 high speed", "claude sonnet fast"), resolve it to the single closest matching pair in the catalog (ignoring spaces, case, and punctuation) and emit that exact { providerID, modelID }. Mention the resolution in warnings so the user can confirm.',
     '- If no catalog entry is a confident match for the user request, OMIT model from the node content (so the thread default applies) and emit an explicit warning listing a few candidate pairs for the user to pick from. Do not guess.',
     '- If the catalog section says the agent catalog is unavailable, never emit a new model object — keep existing nodes untouched and rely on the thread default.',
+    '- If the user does not explicitly pick a model, use the "Copilot default model:" value above as the (agentType, providerID, modelID) triple; when the default is "(none configured ...)", keep the thread-selected model instead.',
+    '- When choosing between models, factor in the `hint:` lines rendered under each agentType/provider/model in the catalog. They describe when each option is preferred (speed, quality, context length, cost, language).',
+    '- Hints are advisory and may mention tags like [fast], [reasoning], [long-context] — useful signals, but the hard constraint stays: the emitted `(providerID, modelID)` pair MUST match a catalog entry exactly.',
+    '- When you set content.model on an agent_step (or execution.model on a sub_graph), you MAY also set a sibling string field `fallbackTag` taken from the tags you see in the hints (for example "complex", "basic", "fast", "visual", "web", "parallel", "preferred", "vision"). This wires the node to a global fallback chain: if the primary model is offline or returns a retryable failure at run time, the runtime automatically tries the next best sibling model tagged the same way (ordered by AgentPolicy priority). Omit `fallbackTag` when the primary should be attempted without any fallback.',
     '- When an agent_step or runtime verification step must write or refresh a declared workspace output, put the exact execution protocol in metadata.brief.',
     '- metadata.brief should tell the agent what file to write, what structure or terminal marker it must contain, and whether the file must be regenerated fresh for this run.',
     '- For managed audit and verify phases that target static workspace files such as outputs/gap-report.json or outputs/verify.txt, do not rely on the existing workspace_file excerpt alone. Add a metadata.brief that explicitly says to rewrite the declared file for this run.',

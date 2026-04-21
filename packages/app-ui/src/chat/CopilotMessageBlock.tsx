@@ -4,6 +4,7 @@ import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { workflowCopilotAttachmentDisplayName } from '@cepage/shared-core';
 import {
   copyTextToClipboard,
+  type ChatTimelineCopilotCheckpoint,
   type ChatTimelineCopilotMessage,
 } from '@cepage/state';
 import {
@@ -15,6 +16,7 @@ import {
   IconCheckCircle,
   IconCopy,
   IconImage,
+  IconRotateCcw,
   IconSparkles,
   IconUser,
   LoadingDots,
@@ -29,6 +31,16 @@ type CopilotMessageBlockProps = {
   onApply?: (messageId: string) => void;
   showAnalysis?: boolean;
   showRawOutput?: boolean;
+  /**
+   * Checkpoint captured before this user message's ops were applied — only
+   * meaningful on `role: 'user'` items. When set and `onRestoreCheckpoint`
+   * is provided, a small inline "Restore" pill is rendered in the header
+   * (Cursor-style) so the user can revert without leaving the message.
+   */
+  checkpoint?: ChatTimelineCopilotCheckpoint;
+  /** Flag from the store: this checkpoint's restore request is in-flight. */
+  restoringCheckpoint?: boolean;
+  onRestoreCheckpoint?: (checkpointId: string) => void;
   /** Compose the chat strings used for clipboard / accessibility labels. */
   labels: {
     you: string;
@@ -43,6 +55,12 @@ type CopilotMessageBlockProps = {
     applying: string;
     output: string;
     copy: string;
+    /** "Checkpoint" noun shown in the tooltip header of the restore pill. */
+    checkpoint?: string;
+    /** Restore button / tooltip verb. */
+    restore?: string;
+    /** Label used while the restore request is in-flight. */
+    restoring?: string;
   };
 };
 
@@ -60,6 +78,9 @@ export function CopilotMessageBlock({
   onApply,
   showAnalysis = true,
   showRawOutput = true,
+  checkpoint,
+  restoringCheckpoint = false,
+  onRestoreCheckpoint,
   labels,
 }: CopilotMessageBlockProps) {
   const isAssistant = item.role === 'assistant';
@@ -125,15 +146,29 @@ export function CopilotMessageBlock({
             </span>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={onCopy}
-          aria-label={labels.copy}
-          title={labels.copy}
-          style={iconButtonStyle}
-        >
-          <IconCopy size={12} />
-        </button>
+        <div style={metaActionsStyle}>
+          {item.role === 'user' && checkpoint && onRestoreCheckpoint ? (
+            <CheckpointRestorePill
+              checkpoint={checkpoint}
+              restoring={restoringCheckpoint}
+              onRestore={onRestoreCheckpoint}
+              labels={{
+                checkpoint: labels.checkpoint ?? 'Checkpoint',
+                restore: labels.restore ?? 'Restore',
+                restoring: labels.restoring ?? 'Restoring…',
+              }}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label={labels.copy}
+            title={labels.copy}
+            style={iconButtonStyle}
+          >
+            <IconCopy size={12} />
+          </button>
+        </div>
       </div>
 
       {showThinking ? (
@@ -248,6 +283,71 @@ export function CopilotMessageBlock({
   );
 }
 
+/**
+ * Cursor-style "Restore" pill attached to a user message. Appears inline in
+ * the message header next to the copy button, with a tooltip showing the
+ * checkpoint hash and an optional summary of what will be reverted.
+ *
+ * Visual contract:
+ *  - Idle: short hash + rotate-counter-clockwise icon + "Restore" label.
+ *  - Restoring: spinner + "Restoring…" label, button disabled.
+ *  - Already restored: greyed out label instead of button; tooltip shows
+ *    the restore time so the user knows the state is frozen.
+ */
+function CheckpointRestorePill({
+  checkpoint,
+  restoring,
+  onRestore,
+  labels,
+}: {
+  checkpoint: ChatTimelineCopilotCheckpoint;
+  restoring: boolean;
+  onRestore: (checkpointId: string) => void;
+  labels: { checkpoint: string; restore: string; restoring: string };
+}) {
+  const ckptId = checkpoint.checkpoint.id;
+  const short = ckptId.slice(0, 8);
+  const alreadyRestored = Boolean(checkpoint.restoredAt);
+  // Tooltip: "Checkpoint #abcd1234 · 5 ops" / "… · restored at 14:02:11".
+  const tooltip = useMemo(() => {
+    const parts: string[] = [`${labels.checkpoint} #${short}`];
+    if (checkpoint.summary.length > 0) {
+      parts.push(`${checkpoint.summary.length} ops`);
+    }
+    if (checkpoint.restoredAt) {
+      parts.push(
+        `restored ${new Date(checkpoint.restoredAt).toLocaleTimeString()}`,
+      );
+    }
+    return parts.join(' · ');
+  }, [labels.checkpoint, short, checkpoint.summary.length, checkpoint.restoredAt]);
+
+  if (alreadyRestored) {
+    return (
+      <span style={restorePillRestoredStyle} title={tooltip}>
+        <IconRotateCcw size={11} />
+        <span style={pillHashStyle}>#{short}</span>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onRestore(ckptId)}
+      disabled={restoring}
+      title={tooltip}
+      aria-label={tooltip}
+      style={restoring ? restorePillDisabledStyle : restorePillStyle}
+    >
+      {restoring ? <Spinner size={11} /> : <IconRotateCcw size={11} />}
+      <span style={pillHashStyle}>#{short}</span>
+      <span style={pillLabelStyle}>
+        {restoring ? labels.restoring : labels.restore}
+      </span>
+    </button>
+  );
+}
+
 const metaRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -283,6 +383,54 @@ const iconButtonStyle: CSSProperties = {
   borderRadius: 6,
   display: 'inline-flex',
   alignItems: 'center',
+};
+
+const metaActionsStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+};
+
+const restorePillBaseStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '2px 8px',
+  borderRadius: 999,
+  border: '1px dashed var(--z-border)',
+  background: 'var(--z-bg-app)',
+  color: 'var(--z-fg-muted)',
+  fontSize: 11,
+  lineHeight: 1,
+  cursor: 'pointer',
+  userSelect: 'none',
+};
+
+const restorePillStyle: CSSProperties = restorePillBaseStyle;
+
+const restorePillDisabledStyle: CSSProperties = {
+  ...restorePillBaseStyle,
+  cursor: 'progress',
+  opacity: 0.7,
+};
+
+const restorePillRestoredStyle: CSSProperties = {
+  ...restorePillBaseStyle,
+  cursor: 'default',
+  opacity: 0.55,
+  fontStyle: 'italic',
+};
+
+const pillHashStyle: CSSProperties = {
+  fontFamily:
+    'ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace',
+  color: 'var(--z-fg-subtle)',
+};
+
+const pillLabelStyle: CSSProperties = {
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+  fontWeight: 600,
 };
 
 const analysisStyle: CSSProperties = {

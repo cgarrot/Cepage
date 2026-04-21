@@ -209,6 +209,24 @@ export const en = {
       daemonBannerBody:
         'Agent runs are dispatched to a local daemon (`cepage-daemon`). Until one is connected, runs you trigger will stay queued. Start the daemon on the machine that should execute the agents.',
       daemonBannerCommand: 'cepage-daemon start',
+      executionRunning: 'Execution running',
+      executionCompleted: 'Execution completed',
+      executionFailed: 'Execution failed',
+      executionCancelled: 'Execution cancelled',
+      executionRunLabel: 'run #{index}',
+      executionPrimary: 'primary',
+      executionUnknownModel: 'unknown model',
+      executionStreamingLabel: 'streaming',
+      executionStepsCount: '{count} steps',
+      executionFallbackLine:
+        'Fell back from {fromProvider}/{fromModel} → {toProvider}/{toModel} ({reason})',
+      executionFallbackReasonUnknown: 'no reason provided',
+      executionFallbackBadge: 'fallback · {count} attempts',
+      executionFellBackShort: 'fell back from {from} to {to}',
+      executionCollapsedSummary: '{steps} · {duration} · {model}',
+      executionExpand: 'Show execution details',
+      executionCollapse: 'Hide execution details',
+      modelStruckLabel: 'Configured model — a fallback was triggered',
     },
     files: {
       title: 'Workspace files',
@@ -906,6 +924,8 @@ export const en = {
     agent_completed: 'Run completed: {label}',
     agent_cancelled: 'Run cancelled: {label}',
     agent_failed: 'Run failed for {label}: {detail}',
+    agent_fallback_switch:
+      'Fell back from {fromProvider}/{fromModel} to {toProvider}/{toModel}: {reason}',
     node_created: 'Created a node',
     node_updated: 'Updated a node',
     node_removed: 'Removed a node',

@@ -5,6 +5,12 @@ import { agentModelRefSchema, agentTypeSchema } from './agent';
 export const agentSelectionSchema = z.object({
   type: agentTypeSchema,
   model: agentModelRefSchema.optional(),
+  // Optional hint that ties the node to an AgentPolicy tag (e.g. 'complex',
+  // 'fast', 'visual'). When set, the server derives an ordered fallback chain
+  // from policies sharing this tag and attempts them if the primary model is
+  // unavailable (preflight via merged catalog, reactive via requeue on retryable
+  // runtime failures). Unknown/empty tag = primary only, no fallback.
+  fallbackTag: z.string().min(1).optional(),
 });
 
 export type AgentSelection = z.infer<typeof agentSelectionSchema>;
@@ -48,15 +54,24 @@ function cloneSelection(value: AgentSelection | null | undefined): AgentSelectio
           },
         }
       : {}),
+    ...(value.fallbackTag ? { fallbackTag: value.fallbackTag } : {}),
   };
 }
 
 function selectionFrom(record: Record<string, unknown> | null): AgentSelection | undefined {
   if (!record) return undefined;
-  const parsed = agentSelectionSchema.safeParse({
+  // Only pass `fallbackTag` into the schema when the source object has a
+  // defined value: zod's `.optional()` preserves an explicit `undefined`
+  // property on the output, which breaks deepStrictEqual consumers that
+  // assume absent fields mean the key is omitted.
+  const candidate: Record<string, unknown> = {
     type: record.type,
     model: record.model,
-  });
+  };
+  if (record.fallbackTag !== undefined) {
+    candidate.fallbackTag = record.fallbackTag;
+  }
+  const parsed = agentSelectionSchema.safeParse(candidate);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -95,6 +110,7 @@ export function readNodeAgentSelection(value: unknown): NodeAgentSelection | nul
   const legacy = selectionFrom({
     type: record.agentType,
     model: record.model,
+    fallbackTag: record.fallbackTag,
   });
   if (legacy) {
     return {
@@ -106,6 +122,7 @@ export function readNodeAgentSelection(value: unknown): NodeAgentSelection | nul
   const nested = selectionFrom({
     type: execution?.type,
     model: execution?.model,
+    fallbackTag: execution?.fallbackTag,
   });
   if (nested) {
     return {
@@ -159,9 +176,15 @@ export function applyNodeAgentSelection(
       } else {
         delete execution.model;
       }
+      if (selection.fallbackTag) {
+        execution.fallbackTag = selection.fallbackTag;
+      } else {
+        delete execution.fallbackTag;
+      }
     } else {
       delete execution.type;
       delete execution.model;
+      delete execution.fallbackTag;
     }
     next.execution = execution;
     return next;
@@ -179,9 +202,15 @@ export function applyNodeAgentSelection(
       } else {
         delete next.model;
       }
+      if (selection.fallbackTag) {
+        next.fallbackTag = selection.fallbackTag;
+      } else {
+        delete next.fallbackTag;
+      }
     } else {
       delete next.agentType;
       delete next.model;
+      delete next.fallbackTag;
     }
   }
   return next;

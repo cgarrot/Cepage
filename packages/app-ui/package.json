@@ -20,7 +20,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src --max-warnings=0",
-    "test": "pnpm build && node --test dist/__tests__/timeline-helpers.test.js dist/__tests__/branch-helpers.test.js dist/__tests__/structured-node-editor.test.js dist/__tests__/input-api-doc.test.js"
+    "test": "pnpm build && node --test dist/__tests__/timeline-helpers.test.js dist/__tests__/branch-helpers.test.js dist/__tests__/structured-node-editor.test.js dist/__tests__/input-api-doc.test.js dist/__tests__/agent-badge-display.test.js dist/__tests__/group-timeline.test.js"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

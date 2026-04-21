@@ -107,4 +107,5 @@ export type WorkflowInputSourceCandidate = {
 export type AgentSelection = {
   type: AgentType;
   model?: AgentModelRef;
+  fallbackTag?: string;
 };

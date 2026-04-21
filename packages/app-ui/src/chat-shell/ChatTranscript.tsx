@@ -6,7 +6,9 @@ import {
   selectUnifiedChatTimeline,
   selectWorkspaceFilesView,
   useWorkspaceStore,
+  type ChatModelRef,
   type ChatTimelineAgentOutput,
+  type ChatTimelineCopilotCheckpoint,
   type ChatTimelineItem,
   type WorkspaceFileEntry,
 } from '@cepage/state';
@@ -18,6 +20,7 @@ import {
   CopilotMessageBlock,
   FileWriteBlock,
   SystemMessageBlock,
+  WorkflowExecutionBlock,
   groupTimelineForRender,
 } from '../chat';
 import { useI18n } from '../I18nProvider';
@@ -44,26 +47,45 @@ export function ChatTranscript({ onOpenStudio, onPreviewFile }: ChatTranscriptPr
   const sessionId = useWorkspaceStore((s) => s.sessionId);
   const copilotMessages = useWorkspaceStore((s) => s.workflowCopilotMessages);
   const copilotCheckpoints = useWorkspaceStore((s) => s.workflowCopilotCheckpoints);
+  const agentRuns = useWorkspaceStore((s) => s.agentRuns);
+  const workflowExecutions = useWorkspaceStore((s) => s.workflowExecutions);
+  const activity = useWorkspaceStore((s) => s.activity);
   const applying = useWorkspaceStore((s) => s.workflowCopilotApplyingMessageId);
   const restoring = useWorkspaceStore((s) => s.workflowCopilotRestoringCheckpointId);
   const applyMessage = useWorkspaceStore((s) => s.applyWorkflowCopilotMessage);
   const restoreCheckpoint = useWorkspaceStore((s) => s.restoreWorkflowCopilotCheckpoint);
+  const openWorkspaceFile = useWorkspaceStore((s) => s.openWorkspaceFile);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const rawNodes = useMemo(() => toRawGraphNodes(storeNodes), [storeNodes]);
-  // Drop raw agent_output rows; they are folded under their parent step by
-  // the grouping helper anyway, but keep the unified selector pure.
   const timeline = useMemo(
     () =>
       selectUnifiedChatTimeline({
         nodes: rawNodes,
         copilotMessages,
         copilotCheckpoints,
-      }).filter((item) => item.kind !== 'agent_output'),
-    [rawNodes, copilotMessages, copilotCheckpoints],
+        agentRuns,
+        executions: workflowExecutions,
+        activity,
+      }),
+    [rawNodes, copilotMessages, copilotCheckpoints, agentRuns, workflowExecutions, activity],
   );
   const grouped = useMemo(() => groupTimelineForRender(timeline), [timeline]);
+
+  // Resolver for "called model" on the orphan blocks (agent_spawn / agent_step
+  // / agent_message that didn't get absorbed by an execution): if the node's
+  // creator is an agent, look up the AgentRun carrying the runtime-effective
+  // model (populated post-fallback by requeueWithNextModel).
+  const resolveCallModel = useCallback(
+    (agentId: string | undefined): ChatModelRef | undefined => {
+      if (!agentId) return undefined;
+      const run = agentRuns[agentId];
+      if (!run?.model) return undefined;
+      return { providerId: run.model.providerID, modelId: run.model.modelID };
+    },
+    [agentRuns],
+  );
   const filesView = useMemo(() => selectWorkspaceFilesView(rawNodes), [rawNodes]);
   const filesById = useMemo(() => {
     const out = new Map<string, WorkspaceFileEntry>();
@@ -174,13 +196,41 @@ export function ChatTranscript({ onOpenStudio, onPreviewFile }: ChatTranscriptPr
       <div ref={containerRef} onScroll={onScroll} style={shellStyle}>
         <div ref={listRef} style={listStyle}>
           {grouped.map((entry) => {
+            if (entry.kind === 'execution_with_stream') {
+              return (
+                <WorkflowExecutionBlock
+                  key={entry.item.id}
+                  item={entry.item}
+                  streamingOutput={entry.streamingOutput}
+                />
+              );
+            }
             const outputs =
               entry.kind === 'agent_step_with_outputs' ? entry.outputs : [];
+            // A `standalone` group may carry a folded-in checkpoint (attached
+            // to its user copilot message). We pass it down so the message
+            // block can inline the Restore pill Cursor-style.
+            const attachedCheckpoint =
+              entry.kind === 'standalone' ? entry.checkpoint : undefined;
+            // Resolve the runtime-effective model for any orphan agent block
+            // so the AgentBadge can render the strike + arrow when the run's
+            // model diverges from the node's configured model.
+            const callModel =
+              entry.item.kind === 'agent_spawn' ||
+              entry.item.kind === 'agent_step' ||
+              entry.item.kind === 'agent_message'
+                ? entry.item.actor.kind === 'agent'
+                  ? resolveCallModel(entry.item.actor.agentId)
+                  : undefined
+                : undefined;
             return renderItem({
               item: entry.item,
               outputs,
+              callModel,
+              attachedCheckpoint,
               onOpenStudio,
               onPreviewFile,
+              onOpenWorkspaceFile: openWorkspaceFile,
               filesById,
               applyingMessageId: applying,
               restoringCheckpointId: restoring,
@@ -210,8 +260,17 @@ export function ChatTranscript({ onOpenStudio, onPreviewFile }: ChatTranscriptPr
 type RenderItemContext = {
   item: ChatTimelineItem;
   outputs: ChatTimelineAgentOutput[];
+  callModel?: ChatModelRef | undefined;
+  /** Checkpoint folded under a user `copilot_message` by the grouper. */
+  attachedCheckpoint?: ChatTimelineCopilotCheckpoint | undefined;
   onOpenStudio: (input?: ChatShellOpenStudioInput) => void;
   onPreviewFile?: ((file: WorkspaceFileEntry) => void) | undefined;
+  /**
+   * Opens a workspace file as a tab and highlights it in the right-side files
+   * panel (the tabs store drives `activeId` which `WorkspaceFilesPanel` uses
+   * for the selected-row styling).
+   */
+  onOpenWorkspaceFile: (input: { path: string; title?: string }) => void;
   filesById: Map<string, WorkspaceFileEntry>;
   applyingMessageId: string | null;
   restoringCheckpointId: string | null;
@@ -242,8 +301,11 @@ function renderItem(ctx: RenderItemContext) {
   const {
     item,
     outputs,
+    callModel,
+    attachedCheckpoint,
     onOpenStudio,
     onPreviewFile,
+    onOpenWorkspaceFile,
     filesById,
     applyingMessageId,
     restoringCheckpointId,
@@ -255,18 +317,47 @@ function renderItem(ctx: RenderItemContext) {
   switch (item.kind) {
     case 'human_message':
     case 'agent_message':
-      return <ChatMessageBlock key={item.id} message={item} />;
+      return (
+        <ChatMessageBlock
+          key={item.id}
+          message={item}
+          {...(callModel ? { callModel } : {})}
+        />
+      );
     case 'agent_spawn':
-      return <AgentSpawnBlock key={item.id} spawn={item} />;
+      return (
+        <AgentSpawnBlock
+          key={item.id}
+          spawn={item}
+          {...(callModel ? { callModel } : {})}
+        />
+      );
     case 'agent_step':
-      return <AgentStepBlock key={item.id} step={item} outputs={outputs} />;
+      return (
+        <AgentStepBlock
+          key={item.id}
+          step={item}
+          outputs={outputs}
+          {...(callModel ? { callModel } : {})}
+        />
+      );
     case 'workspace_file': {
       const lookup = filesById.get(item.id);
+      // Clicking the pill or the eye button both route through the workspace
+      // tabs store: it opens a tab (or focuses one that already exists) and
+      // drives the `activeId` that WorkspaceFilesPanel uses to highlight the
+      // selected row in the right rail. Host apps that want a richer preview
+      // flow can still override via `onPreviewFile`.
+      const openFile = () => onOpenWorkspaceFile({ path: item.path, title: item.title });
+      const previewHandler = onPreviewFile && lookup
+        ? () => onPreviewFile(lookup)
+        : openFile;
       return (
         <FileWriteBlock
           key={item.id}
           file={item}
-          {...(onPreviewFile && lookup ? { onPreview: () => onPreviewFile(lookup) } : {})}
+          onOpen={openFile}
+          onPreview={previewHandler}
           onRevealInStudio={() => onOpenStudio({ selectedNodeId: item.id })}
         />
       );
@@ -275,13 +366,30 @@ function renderItem(ctx: RenderItemContext) {
       return <SystemMessageBlock key={item.id} message={item} />;
     case 'copilot_message': {
       const isApplying = applyingMessageId === item.message.id;
+      // Only the user side ever gets a folded checkpoint, but we pass the
+      // pill-related props unconditionally so the component can early-out
+      // cleanly for assistant messages.
+      const isRestoringAttached =
+        attachedCheckpoint && restoringCheckpointId === attachedCheckpoint.checkpoint.id;
       return (
         <CopilotMessageBlock
           key={item.id}
           item={item}
           applying={isApplying}
           onApply={onApplyCopilot}
-          labels={copilotLabels}
+          labels={{
+            ...copilotLabels,
+            checkpoint: checkpointLabels.checkpoint,
+            restore: checkpointLabels.restore,
+            restoring: checkpointLabels.restoring,
+          }}
+          {...(attachedCheckpoint
+            ? {
+                checkpoint: attachedCheckpoint,
+                restoringCheckpoint: Boolean(isRestoringAttached),
+                onRestoreCheckpoint,
+              }
+            : {})}
         />
       );
     }
@@ -298,6 +406,11 @@ function renderItem(ctx: RenderItemContext) {
       );
     }
     case 'agent_output':
+      return null;
+    // Execution items are rendered via the explicit `WorkflowExecutionBlock`
+    // branch in the caller; defensively ignore them here if grouping fails.
+    case 'execution':
+      return null;
     default:
       return null;
   }

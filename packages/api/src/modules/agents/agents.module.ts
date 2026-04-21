@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AgentsController } from './agents.controller';
 import { AgentArtifactsController } from './agent-artifacts.controller';
 import { AgentPreviewController } from './agent-preview.controller';
 import { AgentsService } from './agents.service';
+import { AgentPolicyModule } from '../agent-policy/agent-policy.module';
 import { GraphModule } from '../graph/graph.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -19,7 +20,13 @@ import { WorkflowManagedFlowService } from './workflow-managed-flow.service';
 import { AgentRecallService } from './agent-recall.service';
 
 @Module({
-  imports: [GraphModule, CollaborationModule, ActivityModule, RuntimeModule],
+  imports: [
+    GraphModule,
+    CollaborationModule,
+    ActivityModule,
+    RuntimeModule,
+    forwardRef(() => AgentPolicyModule),
+  ],
   controllers: [
     AgentsController,
     AgentArtifactsController,

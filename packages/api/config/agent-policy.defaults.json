@@ -1,0 +1,180 @@
+{
+  "$schema-note": "Bootstrap payload seeded into the AgentPolicy / CopilotSettings tables on first install. Override at runtime with AGENT_POLICY_BOOTSTRAP_PATH. level values: 'agentType' | 'provider' | 'model'. providerID/modelID rules: level=agentType keeps both empty; level=provider keeps modelID empty; level=model sets all three. Priorities are advisory — higher priority surfaces earlier in the copilot prompt.",
+  "default": {
+    "agentType": "opencode",
+    "providerID": "opencode-go",
+    "modelID": "kimi-k2.6"
+  },
+  "policies": [
+    {
+      "level": "agentType",
+      "agentType": "opencode",
+      "hint": "Primary workhorse: filesystem, terminal, web-capable agents. Use the model hints below: stack ranked for complex work (prefer opencode-go/kimi-k2.6 first), for fast/basic tasks (minimax highspeed or zai turbo family), and for visual/image-heavy tasks (ollama gemini-3-flash-preview or zai glm-5v-turbo). Spin parallel agent_step branches only when the user asks for concurrent exploration or multi-arm verification.",
+      "tags": ["default-surface"],
+      "priority": 200
+    },
+    {
+      "level": "agentType",
+      "agentType": "cursor_agent",
+      "hint": "Fastest IDE-style surface when latency matters more than terminal automation. Prefer providerID=cursor modelID=composer-2-fast for quick edits, small diffs, and default 'basic fast' work; also acceptable as a lighter fallback when opencode is overkill.",
+      "tags": ["fast", "surgical"],
+      "priority": 190
+    },
+    {
+      "level": "provider",
+      "agentType": "opencode",
+      "providerID": "opencode-go",
+      "hint": "Preferred stack for heavy reasoning on complex tasks (Kimi 2.6 route).",
+      "tags": ["complex"],
+      "priority": 120
+    },
+    {
+      "level": "provider",
+      "agentType": "opencode",
+      "providerID": "minimax-coding-plan",
+      "hint": "High-speed OpenCode lane when you need web/tooling plus very low latency.",
+      "tags": ["fast", "web"],
+      "priority": 115
+    },
+    {
+      "level": "provider",
+      "agentType": "opencode",
+      "providerID": "zai-coding-plan",
+      "hint": "GLM family: use glm-5.1 / turbo variants for parallel arms or fast text; glm-5v-turbo for vision.",
+      "tags": ["parallel", "vision"],
+      "priority": 114
+    },
+    {
+      "level": "provider",
+      "agentType": "opencode",
+      "providerID": "ollama-cloud",
+      "hint": "Good for multimodal previews (gemini-3-flash) and extra parallel Kimi/GLM arms.",
+      "tags": ["vision", "parallel"],
+      "priority": 113
+    },
+    {
+      "level": "provider",
+      "agentType": "opencode",
+      "providerID": "openai",
+      "hint": "Reserve gpt-5.4 when you need a third distinct parallel opinion on complex work.",
+      "tags": ["parallel", "complex"],
+      "priority": 112
+    },
+    {
+      "level": "provider",
+      "agentType": "cursor_agent",
+      "providerID": "cursor",
+      "hint": "Composer models — start with composer-2-fast for minimal latency.",
+      "tags": ["fast"],
+      "priority": 118
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "opencode-go",
+      "modelID": "kimi-k2.6",
+      "hint": "FIRST choice for complex tasks: deepest Kimi stack on opencode-go.",
+      "tags": ["complex", "preferred"],
+      "priority": 110
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "kimi-for-coding-oauth",
+      "modelID": "K2.6",
+      "hint": "SECOND for complex tasks: same Kimi generation via OAuth when opencode-go path is unavailable.",
+      "tags": ["complex"],
+      "priority": 109
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "zai-coding-plan",
+      "modelID": "glm-5.1",
+      "hint": "THIRD for complex tasks: spin up as a parallel arm when you need an independent GLM trajectory (multi-agent / verify another path).",
+      "tags": ["complex", "parallel"],
+      "priority": 108
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "kimi-for-coding",
+      "modelID": "k2p6",
+      "hint": "FOURTH for complex tasks: Kimi k2p6 coding lane.",
+      "tags": ["complex"],
+      "priority": 107
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "ollama-cloud",
+      "modelID": "kimi-k2.6:cloud",
+      "hint": "FIFTH for complex tasks: cloud Kimi arm (good for another parallel worker).",
+      "tags": ["complex", "parallel"],
+      "priority": 106
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "ollama-cloud",
+      "modelID": "glm-5.1",
+      "hint": "SIXTH for complex tasks: extra GLM parallel via ollama-cloud.",
+      "tags": ["complex", "parallel"],
+      "priority": 105
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "openai",
+      "modelID": "gpt-5.4",
+      "hint": "SEVENTH for complex tasks: third parallel / tie-breaker opinion when two Kimi/GLM arms disagree or you need GPT-shaped reasoning.",
+      "tags": ["complex", "parallel"],
+      "priority": 104
+    },
+    {
+      "level": "model",
+      "agentType": "cursor_agent",
+      "providerID": "cursor",
+      "modelID": "composer-2-fast",
+      "hint": "FASTEST Cursor lane: default for basic low-latency tasks; also acceptable as a light fallback for simple visual/chat edits when you should not spin up OpenCode multimodal stacks.",
+      "tags": ["basic", "fast", "visual"],
+      "priority": 100
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "minimax-coding-plan",
+      "modelID": "MiniMax-M2.7-highspeed",
+      "hint": "When you must stay on OpenCode but still move quickly — especially if browsing the web or running tools with tight iteration loops.",
+      "tags": ["basic", "fast", "web"],
+      "priority": 99
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "zai-coding-plan",
+      "modelID": "glm-5v-turbo",
+      "hint": "Fast ZAI vision-capable turbo: use as a fast lane for basic tasks that may glance at images, and as a cost-efficient visual path when you don't need the full Gemini preview arm.",
+      "tags": ["basic", "fast", "visual"],
+      "priority": 98
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "zai-coding-plan",
+      "modelID": "glm-5-turbo",
+      "hint": "Fast text-only turbo lane on ZAI when glm-5v-turbo is unnecessary.",
+      "tags": ["basic", "fast"],
+      "priority": 97
+    },
+    {
+      "level": "model",
+      "agentType": "opencode",
+      "providerID": "ollama-cloud",
+      "modelID": "gemini-3-flash-preview",
+      "hint": "BEST for full visual understanding on OpenCode (screenshots, UI mocks, diagrams).",
+      "tags": ["visual", "preferred"],
+      "priority": 96
+    }
+  ]
+}

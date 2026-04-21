@@ -10,6 +10,7 @@ import { GraphModule } from './modules/graph/graph.module';
 import { ExecutionModule } from './modules/execution/execution.module';
 import { ConnectorsModule } from './modules/connectors/connector.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { AgentPolicyModule } from './modules/agent-policy/agent-policy.module';
 import { RuntimeModule } from './modules/runtime/runtime.module';
 import { WorkflowCopilotModule } from './modules/workflow-copilot/workflow-copilot.module';
 import { WorkflowSkillsModule } from './modules/workflow-skills/workflow-skills.module';
@@ -33,6 +34,7 @@ import { ScheduledSkillRunsModule } from './modules/scheduled-skill-runs/schedul
     ConnectorsModule,
     ExecutionModule,
     AgentsModule,
+    AgentPolicyModule,
     RuntimeModule,
     WorkflowSkillsModule,
     WorkflowCopilotModule,

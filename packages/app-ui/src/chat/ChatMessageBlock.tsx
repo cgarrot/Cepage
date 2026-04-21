@@ -1,7 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { ChatTimelineAgentMessage, ChatTimelineHumanMessage } from '@cepage/state';
+import type {
+  ChatModelRef,
+  ChatTimelineAgentMessage,
+  ChatTimelineHumanMessage,
+} from '@cepage/state';
 import { MarkdownBody } from '../MarkdownBody';
 import { AgentBadge } from './AgentBadge';
 import { BlockShell } from './BlockShell';
@@ -9,6 +13,12 @@ import { BlockShell } from './BlockShell';
 type ChatMessageBlockProps = {
   message: ChatTimelineHumanMessage | ChatTimelineAgentMessage;
   trailing?: ReactNode;
+  /**
+   * Model actually invoked at runtime for this message's agent run. When it
+   * differs from the configured `message.model` the badge strikes the
+   * configured one and shows the effective one with an arrow.
+   */
+  callModel?: ChatModelRef;
 };
 
 /**
@@ -16,7 +26,7 @@ type ChatMessageBlockProps = {
  * agent. Layout mirrors Cursor / Codex style: badge + content stacked, with
  * tone differing between speakers so the eye can scan quickly.
  */
-export function ChatMessageBlock({ message, trailing }: ChatMessageBlockProps) {
+export function ChatMessageBlock({ message, trailing, callModel }: ChatMessageBlockProps) {
   const isAgent = message.kind === 'agent_message';
   return (
     <BlockShell
@@ -28,7 +38,13 @@ export function ChatMessageBlock({ message, trailing }: ChatMessageBlockProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <AgentBadge
           actor={message.actor}
-          {...(isAgent ? { agentType: message.agentType, model: message.model } : {})}
+          {...(isAgent
+            ? {
+                agentType: message.agentType,
+                model: message.model,
+                ...(callModel ? { callModel } : {}),
+              }
+            : {})}
         />
         {trailing ? <div style={{ marginLeft: 'auto' }}>{trailing}</div> : null}
       </div>

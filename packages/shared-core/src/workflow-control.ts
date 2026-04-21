@@ -187,6 +187,7 @@ export const workflowSubgraphExecutionSchema = z.object({
   newExecution: z.boolean().optional(),
   type: agentTypeSchema.optional(),
   model: agentModelRefSchema.optional(),
+  fallbackTag: z.string().min(1).optional(),
 });
 export type WorkflowSubgraphExecution = z.infer<typeof workflowSubgraphExecutionSchema>;
 

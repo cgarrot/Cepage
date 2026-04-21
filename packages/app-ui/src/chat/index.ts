@@ -10,4 +10,5 @@ export { FilePill } from './FilePill';
 export { FileWriteBlock } from './FileWriteBlock';
 export { SystemMessageBlock } from './SystemMessageBlock';
 export { ToolCallBlock, type ToolCallStatus } from './ToolCallBlock';
+export { WorkflowExecutionBlock } from './WorkflowExecutionBlock';
 export { groupTimelineForRender, type GroupedChatItem } from './groupTimeline';

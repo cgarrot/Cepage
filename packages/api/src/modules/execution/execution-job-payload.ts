@@ -14,6 +14,19 @@ const positionSchema = z.object({
   y: z.number(),
 });
 
+/**
+ * One model binding inside an agent_run fallback chain. The `agentType` is
+ * duplicated from the payload's top-level `type` (we don't cross-fall-back
+ * between agent types) but we carry it explicitly so consumers can work with
+ * a self-contained chain entry.
+ */
+export const agentRunFallbackEntrySchema = z.object({
+  agentType: agentTypeSchema,
+  providerID: z.string().min(1),
+  modelID: z.string().min(1),
+});
+export type AgentRunFallbackEntry = z.infer<typeof agentRunFallbackEntrySchema>;
+
 export const agentRunJobPayloadSchema = z.object({
   mode: z.enum(['graph', 'execution']),
   sessionId: z.string().min(1),
@@ -42,6 +55,16 @@ export const agentRunJobPayloadSchema = z.object({
   requestId: z.string().optional(),
   worktreeId: z.string().optional(),
   budgetAccountId: z.string().optional(),
+  // Ordered list of model bindings to try for this node. `fallbackChain[0]` is
+  // always the primary (matches top-level `type` + `model`); subsequent entries
+  // are sibling models derived from AgentPolicy by tag. `fallbackIndex` is the
+  // zero-based position currently being attempted. When the daemon reports a
+  // retryable failure and the chain has more entries, DaemonDispatchService
+  // requeues a fresh AgentRun at `fallbackIndex+1`. Absent/empty chain = no
+  // reactive fallback (behaves like before).
+  fallbackChain: z.array(agentRunFallbackEntrySchema).optional(),
+  fallbackIndex: z.number().int().nonnegative().optional(),
+  fallbackTag: z.string().min(1).optional(),
 });
 export type AgentRunJobPayload = z.infer<typeof agentRunJobPayloadSchema>;
 

@@ -361,6 +361,20 @@ export class RunArtifactsService {
           content: WorkflowArtifactContent;
         } => entry.content?.role === 'output',
       );
+
+    // Covered = every relative path already represented by a workspace_file
+    // node anywhere in the session. We widen the lookup to the full snapshot
+    // (not just the owner's component) so we never create duplicates when a
+    // copilot or another phase already declared the same artifact elsewhere.
+    const coveredPaths = new Set<string>();
+    for (const node of snapshot.nodes) {
+      if (node.type !== 'workspace_file') continue;
+      const content = readWorkflowArtifactContent(node.content);
+      if (!content) continue;
+      coveredPaths.add(resolveWorkflowArtifactRelativePath(content, bundle.summary.runId));
+      if (content.relativePath) coveredPaths.add(content.relativePath);
+    }
+
     for (const entry of files) {
       const resolvedRelativePath = resolveWorkflowArtifactRelativePath(entry.content, bundle.summary.runId);
       const change = bundle.files.find((file) => file.path === resolvedRelativePath)?.kind;
@@ -382,6 +396,61 @@ export class RunArtifactsService {
         { type: 'system', reason: 'run-artifacts' },
       );
     }
+
+    // Auto-adopt: every file the run wrote that nothing has declared yet
+    // becomes its own workspace_file node, so the right-side panel shows
+    // exactly what actually landed on disk (e.g., intermediate phase outputs
+    // the user never pre-declared).
+    const ownerNode = snapshot.nodes.find((node) => node.id === bundle.summary.ownerNodeId) ?? null;
+    const baseX = (ownerNode?.position?.x ?? 0) + 400;
+    const baseY = (ownerNode?.position?.y ?? 0) + 200;
+    let adopted = 0;
+    for (const change of bundle.files) {
+      if (change.kind !== 'added' && change.kind !== 'modified') continue;
+      if (coveredPaths.has(change.path)) continue;
+      const current = await this.readCurrentSnapshot(bundle.summary.cwd, change.path);
+      if (current.kind === 'missing') continue;
+      const content = this.buildAdoptedWorkspaceFileContent({
+        executionId: bundle.summary.executionId,
+        runId: bundle.summary.runId,
+        relativePath: change.path,
+        current,
+        change: change.kind,
+      });
+      await this.graph.addNode(sessionId, {
+        type: 'workspace_file',
+        content: content as unknown as GraphNode['content'],
+        position: { x: baseX, y: baseY + adopted * 72 },
+        creator: { type: 'system', reason: 'run-artifacts' },
+        metadata: { adoptedByRun: bundle.summary.runId },
+      });
+      coveredPaths.add(change.path);
+      adopted += 1;
+    }
+  }
+
+  private buildAdoptedWorkspaceFileContent(input: {
+    executionId?: string;
+    runId: string;
+    relativePath: string;
+    current: RunArtifactFileSnapshot;
+    change: 'added' | 'modified';
+  }): WorkflowArtifactContent {
+    return {
+      title: path.basename(input.relativePath),
+      relativePath: input.relativePath,
+      role: 'output',
+      origin: 'agent_output',
+      kind: input.current.kind === 'text' ? 'text' : 'binary',
+      transferMode: 'reference',
+      ...(input.current.kind !== 'missing' ? { size: input.current.size } : {}),
+      ...(input.current.kind === 'text' ? { excerpt: trimText(input.current.text, 800) } : {}),
+      ...(input.executionId ? { sourceExecutionId: input.executionId } : {}),
+      sourceRunId: input.runId,
+      status: 'available',
+      lastSeenAt: new Date().toISOString(),
+      change: input.change,
+    };
   }
 
   private safeResolvePath(root: string, requestedPath: string) {

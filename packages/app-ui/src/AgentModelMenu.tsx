@@ -9,14 +9,23 @@ import { useI18n } from './I18nProvider';
 
 type MenuPosition = {
   left: number;
-  top: number;
+  // Exactly one of `top` / `bottom` is set: the menu is anchored to the
+  // viewport edge matching the anchor so its visible height follows the
+  // contents rather than the max-height. A drop-up popover sets `bottom` so
+  // that its bottom edge stays glued to the trigger regardless of how many
+  // rows the menu ends up rendering.
+  top?: number;
+  bottom?: number;
 };
+
+type VerticalAnchor = { top: number } | { bottom: number };
 
 const PROVIDER_MENU_WIDTH = 260;
 const PROVIDER_MENU_MAX_HEIGHT = 320;
 const MODEL_MENU_WIDTH = 280;
 const MODEL_MENU_MAX_HEIGHT = 320;
 const MENU_PADDING = 12;
+const MENU_TRIGGER_GAP = 6;
 
 type MenuModel = AgentCatalogProvider['models'][number] & {
   sourceLabel: string;
@@ -41,12 +50,28 @@ type AgentModelMenuProps = {
   }) => ReactNode;
 };
 
-function clampPosition(left: number, top: number, width: number, height: number): MenuPosition {
+function clampPosition(
+  left: number,
+  width: number,
+  height: number,
+  vertical: VerticalAnchor,
+): MenuPosition {
   const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
   const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight;
+  const clampedLeft = Math.max(
+    MENU_PADDING,
+    Math.min(left, viewportWidth - width - MENU_PADDING),
+  );
+  const maxVertical = Math.max(MENU_PADDING, viewportHeight - height - MENU_PADDING);
+  if ('top' in vertical) {
+    return {
+      left: clampedLeft,
+      top: Math.max(MENU_PADDING, Math.min(vertical.top, maxVertical)),
+    };
+  }
   return {
-    left: Math.max(MENU_PADDING, Math.min(left, viewportWidth - width - MENU_PADDING)),
-    top: Math.max(MENU_PADDING, Math.min(top, viewportHeight - height - MENU_PADDING)),
+    left: clampedLeft,
+    bottom: Math.max(MENU_PADDING, Math.min(vertical.bottom, maxVertical)),
   };
 }
 
@@ -54,7 +79,9 @@ function clampPosition(left: number, top: number, width: number, height: number)
  * Place the provider popover near the trigger — drop-down when it fits, otherwise
  * drop-up so the menu stays visually anchored to the button (composer often sits
  * at the bottom of the viewport, where a naive drop-down would be clamped to the
- * middle of the screen).
+ * middle of the screen). In drop-up mode the popover is anchored by its bottom
+ * edge so its visible height follows the rendered content instead of floating
+ * far above the trigger when the menu has only a couple of rows.
  */
 function positionAroundTrigger(
   triggerRect: DOMRect,
@@ -67,17 +94,20 @@ function positionAroundTrigger(
   const dropDown = spaceBelow >= Math.min(desiredHeight, 200) || spaceBelow >= spaceAbove;
   const available = Math.max(160, dropDown ? spaceBelow : spaceAbove);
   const height = Math.min(desiredHeight, available);
-  const top = dropDown ? triggerRect.bottom + 6 : triggerRect.top - height - 6;
+  const vertical: VerticalAnchor = dropDown
+    ? { top: triggerRect.bottom + MENU_TRIGGER_GAP }
+    : { bottom: viewportHeight - triggerRect.top + MENU_TRIGGER_GAP };
   return {
-    position: clampPosition(triggerRect.left, top, width, height),
+    position: clampPosition(triggerRect.left, width, height, vertical),
     height,
   };
 }
 
 /**
  * Place the submenu next to its provider row — drop-right when it fits, drop-left
- * otherwise. The vertical anchor follows the row but is clamped so it never spills
- * off-screen.
+ * otherwise. The vertical anchor follows the row's top edge when there is enough
+ * room below it, otherwise the submenu is pinned by its bottom to avoid the
+ * clamped max-height pushing the menu arbitrarily high away from the row.
  */
 function positionAroundRow(
   rowRect: DOMRect,
@@ -89,11 +119,17 @@ function positionAroundRow(
   const spaceRight = viewportWidth - rowRect.right - MENU_PADDING;
   const spaceLeft = rowRect.left - MENU_PADDING;
   const dropRight = spaceRight >= width || spaceRight >= spaceLeft;
-  const left = dropRight ? rowRect.right + 6 : rowRect.left - width - 6;
-  const available = Math.max(180, viewportHeight - 2 * MENU_PADDING);
+  const left = dropRight ? rowRect.right + MENU_TRIGGER_GAP : rowRect.left - width - MENU_TRIGGER_GAP;
+  const spaceBelow = viewportHeight - rowRect.top - MENU_PADDING;
+  const spaceAbove = rowRect.bottom - MENU_PADDING;
+  const alignTop = spaceBelow >= Math.min(desiredHeight, 200) || spaceBelow >= spaceAbove;
+  const available = Math.max(180, alignTop ? spaceBelow : spaceAbove);
   const height = Math.min(desiredHeight, available);
+  const vertical: VerticalAnchor = alignTop
+    ? { top: rowRect.top }
+    : { bottom: viewportHeight - rowRect.bottom };
   return {
-    position: clampPosition(left, rowRect.top, width, height),
+    position: clampPosition(left, width, height, vertical),
     height,
   };
 }
@@ -494,20 +530,21 @@ const emptyStyle = {
 
 function providerMenuStyle(position: MenuPosition, height: number) {
   return {
-    position: 'fixed',
+    position: 'fixed' as const,
     left: position.left,
     top: position.top,
+    bottom: position.bottom,
     zIndex: 1200,
     width: PROVIDER_MENU_WIDTH,
     maxHeight: height,
-    overflowY: 'auto',
+    overflowY: 'auto' as const,
     padding: 8,
     borderRadius: 12,
     border: '1px solid var(--z-menu-border)',
     background: 'var(--z-menu-bg)',
     boxShadow: 'var(--z-menu-shadow)',
     backdropFilter: 'blur(16px)',
-  } as const;
+  };
 }
 
 function providerRowStyle(isActive: boolean, isSelected: boolean, isUnavailable = false) {
@@ -528,20 +565,21 @@ function providerRowStyle(isActive: boolean, isSelected: boolean, isUnavailable 
 
 function modelMenuStyle(position: MenuPosition, height: number) {
   return {
-    position: 'fixed',
+    position: 'fixed' as const,
     left: position.left,
     top: position.top,
+    bottom: position.bottom,
     zIndex: 1201,
     width: MODEL_MENU_WIDTH,
     maxHeight: height,
-    overflowY: 'auto',
+    overflowY: 'auto' as const,
     padding: 8,
     borderRadius: 12,
     border: '1px solid var(--z-menu-border)',
     background: 'var(--z-menu-bg)',
     boxShadow: 'var(--z-menu-shadow)',
     backdropFilter: 'blur(16px)',
-  } as const;
+  };
 }
 
 const modelTitleStyle = {

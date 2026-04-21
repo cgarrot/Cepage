@@ -34,7 +34,11 @@ import { ActivityService } from '../activity/activity.service';
 import type { AgentRun, WakeReason } from '@cepage/shared-core';
 import { RunArtifactsService } from './run-artifacts.service';
 import { RuntimeService } from '../runtime/runtime.service';
-import type { AgentRunJobPayload } from '../execution/execution-job-payload';
+import type {
+  AgentRunFallbackEntry,
+  AgentRunJobPayload,
+} from '../execution/execution-job-payload';
+import { AgentPolicyService } from '../agent-policy/agent-policy.service';
 import { BudgetPolicyService } from '../execution/budget-policy.service';
 import { DaemonRegistryService } from '../execution/daemon/daemon-registry.service';
 import { LeaseService } from '../execution/lease.service';
@@ -126,6 +130,12 @@ export class AgentsService {
     // "daemon offline" placeholder instead of crashing.
     @Optional()
     private readonly daemonRegistry?: DaemonRegistryService,
+    // Optional (AgentPolicyModule imports AgentsModule so we go through
+    // forwardRef to avoid a circular DI). When missing, fallback chains are
+    // not computed — the run goes with just the primary model.
+    @Optional()
+    @Inject(forwardRef(() => AgentPolicyService))
+    private readonly agentPolicy?: AgentPolicyService,
   ) {}
 
   private agentCreator(runId: string, agentType: AgentType): Creator {
@@ -170,6 +180,117 @@ export class AgentsService {
     const merged = (await this.daemonRegistry?.getMergedCatalog()) ?? null;
     if (!merged || merged.providers.length === 0) return null;
     return merged;
+  }
+
+  /**
+   * Preflight + build the fallback chain for an agent run.
+   *
+   * - Derives an ordered chain of `(agentType, providerID, modelID)` triplets
+   *   starting with the caller's primary and extended with sibling models
+   *   pulled from AgentPolicy (by `fallbackTag` when provided). This requires
+   *   `AgentPolicyService` — when it's not wired (tests that build the
+   *   service bare), we return only the primary.
+   * - Consults the merged catalog and picks the first entry that is actually
+   *   live (provider present, `availability !== 'unavailable'`, and the model
+   *   appears in the provider's model list). Entries earlier in the chain that
+   *   are known-unavailable are skipped but kept in the chain tail so a later
+   *   runtime failure can still fall back to a sibling.
+   * - When nothing in the chain is live (or no catalog is published), keep the
+   *   primary as `selected` — the daemon will fail later, which is fine: the
+   *   chain is preserved so the reactive `failJob` path can still try the
+   *   next entry.
+   *
+   * Returns `{ selected, chain, index }` where:
+   *   - `selected` is the binding to actually use for this spawn
+   *   - `chain` is the full ordered list (includes `selected` at position `index`)
+   *   - `index` is the zero-based position of `selected` in `chain`
+   *
+   * When no model is provided at all (primary has `type` only), fallback is
+   * disabled (empty chain, index 0, selected = undefined model) — the run
+   * uses whichever default the daemon picks for that agent type.
+   */
+  async resolveRunFallback(input: {
+    agentType: AgentType;
+    model?: AgentModelRef;
+    fallbackTag?: string;
+  }): Promise<{
+    selected: AgentModelRef | undefined;
+    chain: AgentRunFallbackEntry[];
+    index: number;
+  }> {
+    if (!input.model) {
+      return { selected: undefined, chain: [], index: 0 };
+    }
+    const primary: AgentRunFallbackEntry = {
+      agentType: input.agentType,
+      providerID: input.model.providerID,
+      modelID: input.model.modelID,
+    };
+    let chain: AgentRunFallbackEntry[] = [primary];
+    if (this.agentPolicy) {
+      try {
+        chain = await this.agentPolicy.resolveFallbackChain(primary, input.fallbackTag);
+      } catch {
+        chain = [primary];
+      }
+    }
+    const catalog = await this.listCatalogForPrompt().catch(() => null);
+    if (!catalog) {
+      return {
+        selected: { providerID: primary.providerID, modelID: primary.modelID },
+        chain,
+        index: 0,
+      };
+    }
+    for (let i = 0; i < chain.length; i += 1) {
+      if (this.isBindingLive(catalog, chain[i])) {
+        const entry = chain[i];
+        return {
+          selected: { providerID: entry.providerID, modelID: entry.modelID },
+          chain,
+          index: i,
+        };
+      }
+    }
+    return {
+      selected: { providerID: primary.providerID, modelID: primary.modelID },
+      chain,
+      index: 0,
+    };
+  }
+
+  private isBindingLive(catalog: AgentCatalog, binding: AgentRunFallbackEntry): boolean {
+    // The merged daemon catalog uses two possible shapes:
+    //   (1) "denormalized" — one top-level entry per upstream provider, where
+    //       provider.providerID === model.providerID (e.g. opencode-go, zai-coding-plan).
+    //       This is what the fallback unit tests double.
+    //   (2) "aggregated"   — one top-level entry per agentType (opencode,
+    //       cursor_agent), with mixed-provider models inside models[] where
+    //       each model carries its own upstream providerID (google, zai-coding-plan, …).
+    //       This is what the real daemon publishes today.
+    // In both shapes, the canonical identity of a binding is
+    // (agentType, model.providerID, model.modelID) — the top-level providerID is
+    // sometimes just an alias of agentType. We therefore iterate every provider
+    // of the requested agentType, skip unavailable ones, and consider the
+    // binding live when any ready provider advertises a model with the matching
+    // (providerID, modelID) pair. If a ready provider has no models listed
+    // (daemon still enumerating), we accept the binding optimistically — that
+    // preserves the prior lenience for partially-populated catalogs.
+    const candidates = catalog.providers.filter((p) => p.agentType === binding.agentType);
+    if (candidates.length === 0) return false;
+    for (const provider of candidates) {
+      if (provider.availability === 'unavailable') continue;
+      const models = provider.models ?? [];
+      if (models.length === 0) return true;
+      if (
+        models.some(
+          (m) => m.providerID === binding.providerID && m.modelID === binding.modelID,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -724,6 +845,9 @@ export class AgentsService {
     recall?: AgentKernelRecallEntry[];
     delegation?: AgentDelegationContext;
     requestId?: string;
+    fallbackChain?: AgentRunFallbackEntry[];
+    fallbackIndex?: number;
+    fallbackTag?: string;
   }): void {
     if (this.supervisor) {
       void this.supervisor.queueAgentRun({
@@ -749,6 +873,9 @@ export class AgentsService {
         recall: input.recall,
         delegation: input.delegation,
         requestId: input.requestId,
+        fallbackChain: input.fallbackChain,
+        fallbackIndex: input.fallbackIndex,
+        fallbackTag: input.fallbackTag,
       });
       return;
     }
@@ -1196,6 +1323,16 @@ export class AgentsService {
       }) ??
       body;
     await this.ensureAdapterAvailable(selection.type);
+    const fallbackTag =
+      'fallbackTag' in selection && typeof selection.fallbackTag === 'string'
+        ? selection.fallbackTag
+        : undefined;
+    const fallback = await this.resolveRunFallback({
+      agentType: selection.type,
+      model: selection.model,
+      fallbackTag,
+    });
+    const resolvedModel = fallback.selected ?? selection.model;
     const activeExecution =
       !body.newExecution && !input.executionId && !input.retryOfRunId
         ? await findActiveExecution(
@@ -1258,7 +1395,7 @@ export class AgentsService {
         runtime,
         seedNodeIds: body.seedNodeIds,
         startedAt,
-        model: selection.model,
+        model: resolvedModel,
       });
     }
     const ownerNodeId = stepNode?.id ?? triggerNode?.id ?? body.seedNodeIds[0] ?? runId;
@@ -1280,8 +1417,8 @@ export class AgentsService {
         stepNodeId: stepNode?.id ?? null,
         retryOfRunId: input.retryOfRunId ?? null,
         parentRunId: body.parentRunId ?? null,
-        modelProviderId: selection.model?.providerID,
-        modelId: selection.model?.modelID,
+        modelProviderId: resolvedModel?.providerID,
+        modelId: resolvedModel?.modelID,
         outputText: '',
         isStreaming: true,
       },
@@ -1301,8 +1438,8 @@ export class AgentsService {
         seedNodeIds: body.seedNodeIds,
         startedAt,
         endedAt: null,
-        modelProviderId: selection.model?.providerID ?? null,
-        modelId: selection.model?.modelID ?? null,
+        modelProviderId: resolvedModel?.providerID ?? null,
+        modelId: resolvedModel?.modelID ?? null,
       },
     });
 
@@ -1328,7 +1465,7 @@ export class AgentsService {
       triggerNodeId: triggerNode?.id ?? null,
       stepNodeId: stepNode?.id ?? null,
       cwd,
-      model: selection.model,
+      model: resolvedModel,
     });
 
     this.collaboration.emitSession(session.id, {
@@ -1348,7 +1485,7 @@ export class AgentsService {
       triggerNodeId: triggerNode?.id ?? null,
       stepNodeId: stepNode?.id ?? null,
       type: selection.type,
-      model: selection.model,
+      model: resolvedModel,
       seedNodeIds: body.seedNodeIds,
       role: body.role,
       wakeReason: body.wakeReason,
@@ -1360,6 +1497,9 @@ export class AgentsService {
       recall: kernel.recall,
       delegation: kernel.delegation,
       requestId: body.requestId,
+      fallbackChain: fallback.chain.length > 0 ? fallback.chain : undefined,
+      fallbackIndex: fallback.chain.length > 0 ? fallback.index : undefined,
+      fallbackTag,
     });
 
     return ok({

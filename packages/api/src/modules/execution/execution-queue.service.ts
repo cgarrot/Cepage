@@ -253,6 +253,35 @@ export class ExecutionQueueService {
     return status;
   }
 
+  /**
+   * Terminally fails a job regardless of remaining attempts. Used by the
+   * daemon fallback path when it has decided to spawn a sibling job with the
+   * next model of the fallback chain: the original job's remaining attempts
+   * must NOT be consumed (otherwise the queue would re-lease it, respawn the
+   * broken primary, and create duplicate sibling runs — one per remaining
+   * attempt). Callers must have already finalized the associated AgentRun and
+   * application-level state before calling this.
+   */
+  async failJobTerminal(jobId: string, leaseToken: string, error: string): Promise<ExecutionJobStatus> {
+    const updated = await this.prisma.executionJob.updateMany({
+      where: {
+        id: jobId,
+        status: 'running',
+        leaseToken,
+      },
+      data: {
+        status: 'failed',
+        error,
+        workerId: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        availableAt: undefined,
+        finishedAt: new Date(),
+      },
+    });
+    return updated.count > 0 ? 'failed' : 'failed';
+  }
+
   async reclaimExpiredJobs(): Promise<number> {
     const result = await this.prisma.executionJob.updateMany({
       where: {

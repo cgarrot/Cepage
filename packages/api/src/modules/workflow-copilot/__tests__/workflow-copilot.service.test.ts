@@ -5,6 +5,7 @@ import {
   WORKFLOW_COPILOT_CURSOR_ATTACHMENT_INLINE_MAX_BYTES,
   WORKFLOW_COPILOT_STOPPED,
   type AgentCatalog,
+  type AgentCatalogForPrompt,
   type GraphEdge,
   readWorkflowInputContent,
   workflowCopilotMessageSchema,
@@ -511,12 +512,13 @@ test('buildPrompt renders the agent catalog and binding rules when a catalog is 
   assert.match(prompt, /Available agent providers\/models \(source of truth for model binding\):/);
   assert.match(prompt, /- agentType: opencode \(OpenCode\)/);
   assert.match(prompt, /- agentType: cursor_agent \(Cursor Agent\)/);
-  assert.match(
-    prompt,
-    /providerID="minimax-coding-plan" modelID="MiniMax-M2\.7-highspeed"/,
-  );
-  assert.match(prompt, /providerID="kimi-for-coding-oauth" modelID="K2\.6" \*default/);
-  assert.match(prompt, /providerID="openai" modelID="gpt-5\.4"/);
+  assert.match(prompt, /providerID="minimax-coding-plan"/);
+  assert.match(prompt, /modelID="MiniMax-M2\.7-highspeed"/);
+  assert.match(prompt, /providerID="kimi-for-coding-oauth"/);
+  assert.match(prompt, /modelID="K2\.6" \*catalog-default/);
+  assert.match(prompt, /providerID="openai"/);
+  assert.match(prompt, /modelID="gpt-5\.4"/);
+  assert.match(prompt, /Copilot default model: \(none configured — keep thread-selected model\)/);
   assert.match(
     prompt,
     /BOTH model\.providerID AND model\.modelID MUST match exactly one pair listed in "Available agent providers\/models"/,
@@ -530,6 +532,175 @@ test('buildPrompt renders the agent catalog and binding rules when a catalog is 
   );
   assert.match(prompt, /utilise opencode minimax 2\.7 high speed/);
   assert.match(prompt, /OMIT model from the node content \(so the thread default applies\)/);
+});
+
+test('buildPrompt renders hints at all 3 levels and marks the configured default with *DEFAULT', () => {
+  const snap = snapshot();
+  const availableModels: AgentCatalogForPrompt = {
+    catalog: {
+      providers: [
+        {
+          agentType: 'opencode',
+          providerID: 'opencode',
+          label: 'OpenCode',
+          availability: 'ready',
+          models: [
+            {
+              providerID: 'minimax-coding-plan',
+              modelID: 'MiniMax-M2.7-highspeed',
+              label: 'minimax-coding-plan/MiniMax-M2.7-highspeed',
+            },
+            {
+              providerID: 'minimax-coding-plan',
+              modelID: 'MiniMax-M2.7',
+              label: 'minimax-coding-plan/MiniMax-M2.7',
+            },
+          ],
+        },
+      ],
+      fetchedAt: '2026-04-20T21:08:00.000Z',
+    },
+    policies: [
+      {
+        level: 'agentType',
+        agentType: 'opencode',
+        hint: 'Main coder agent — preferred for implementation and refactors.',
+        tags: [],
+        priority: 100,
+      },
+      {
+        level: 'provider',
+        agentType: 'opencode',
+        providerID: 'minimax-coding-plan',
+        hint: 'Fast 128k provider, best latency/quality ratio for loops.',
+        tags: ['fast', 'long-context'],
+        priority: 100,
+      },
+      {
+        level: 'model',
+        agentType: 'opencode',
+        providerID: 'minimax-coding-plan',
+        modelID: 'MiniMax-M2.7-highspeed',
+        hint: 'Fastest MiniMax variant. Pick when the user says "minimax" or "fast".',
+        tags: ['fast', 'coding'],
+        priority: 100,
+      },
+    ],
+    defaults: {
+      defaultAgentType: 'opencode',
+      defaultProviderID: 'minimax-coding-plan',
+      defaultModelID: 'MiniMax-M2.7-highspeed',
+    },
+  };
+  const prompt = buildPrompt({
+    sessionId: 'session-1',
+    workingDirectory: '/tmp/workspace',
+    flow: workflowFromSnapshot(snap),
+    scope: { kind: 'session' },
+    scopeNodes: snap.nodes,
+    thread: {
+      id: 'thread-1',
+      sessionId: 'session-1',
+      surface: 'sidebar',
+      ownerNodeId: undefined,
+      title: 'Workflow copilot',
+      agentType: 'opencode',
+      model: { providerID: 'minimax-coding-plan', modelID: 'MiniMax-M2.7-highspeed' },
+      scope: { kind: 'session' },
+      mode: 'edit',
+      autoApply: true,
+      autoRun: false,
+      externalSessionId: undefined,
+      createdAt: '2026-04-07T10:00:00.000Z',
+      updatedAt: '2026-04-07T10:00:00.000Z',
+    } satisfies WorkflowCopilotThread,
+    history: [],
+    availableModels,
+  });
+
+  assert.match(prompt, /agentType\.hint: Main coder agent/);
+  assert.match(
+    prompt,
+    /provider\.hint: \[fast, long-context\] Fast 128k provider, best latency\/quality ratio for loops\./,
+  );
+  assert.match(
+    prompt,
+    /model\.hint: \[fast, coding\] Fastest MiniMax variant\. Pick when the user says "minimax" or "fast"\./,
+  );
+  assert.match(prompt, /modelID="MiniMax-M2\.7-highspeed" \*DEFAULT/);
+  assert.doesNotMatch(prompt, /modelID="MiniMax-M2\.7" \*DEFAULT/);
+  assert.match(
+    prompt,
+    /Copilot default model: opencode \/ minimax-coding-plan \/ MiniMax-M2\.7-highspeed/,
+  );
+  assert.match(
+    prompt,
+    /If the user does not explicitly pick a model, use the "Copilot default model:" value above/,
+  );
+  assert.match(
+    prompt,
+    /When choosing between models, factor in the `hint:` lines/,
+  );
+  assert.match(prompt, /Hints are advisory/);
+});
+
+test('buildPrompt renders "(none configured)" when no default is set and omits hint lines when absent', () => {
+  const snap = snapshot();
+  const availableModels: AgentCatalogForPrompt = {
+    catalog: {
+      providers: [
+        {
+          agentType: 'opencode',
+          providerID: 'opencode',
+          label: 'OpenCode',
+          availability: 'ready',
+          models: [
+            {
+              providerID: 'anthropic',
+              modelID: 'claude-opus-4-7',
+              label: 'anthropic/claude-opus-4-7',
+            },
+          ],
+        },
+      ],
+      fetchedAt: '2026-04-20T21:08:00.000Z',
+    },
+    policies: [],
+    defaults: {},
+  };
+  const prompt = buildPrompt({
+    sessionId: 'session-1',
+    workingDirectory: '/tmp/workspace',
+    flow: workflowFromSnapshot(snap),
+    scope: { kind: 'session' },
+    scopeNodes: snap.nodes,
+    thread: {
+      id: 'thread-1',
+      sessionId: 'session-1',
+      surface: 'sidebar',
+      ownerNodeId: undefined,
+      title: 'Workflow copilot',
+      agentType: 'opencode',
+      model: { providerID: 'anthropic', modelID: 'claude-opus-4-7' },
+      scope: { kind: 'session' },
+      mode: 'edit',
+      autoApply: true,
+      autoRun: false,
+      externalSessionId: undefined,
+      createdAt: '2026-04-07T10:00:00.000Z',
+      updatedAt: '2026-04-07T10:00:00.000Z',
+    } satisfies WorkflowCopilotThread,
+    history: [],
+    availableModels,
+  });
+
+  assert.match(prompt, /Copilot default model: \(none configured — keep thread-selected model\)/);
+  assert.match(prompt, /providerID="anthropic"/);
+  assert.match(prompt, /modelID="claude-opus-4-7"/);
+  assert.doesNotMatch(prompt, /\*DEFAULT/);
+  assert.doesNotMatch(prompt, /agentType\.hint:/);
+  assert.doesNotMatch(prompt, /provider\.hint:/);
+  assert.doesNotMatch(prompt, /model\.hint:/);
 });
 
 test('buildPrompt warns when the agent catalog is unavailable', () => {
@@ -6048,4 +6219,342 @@ test('stopThread aborts an in-flight copilot turn', async () => {
   assert.equal(res.stopped, true);
   assert.equal(stopped, true);
   assert.equal(send.assistantMessage.error, WORKFLOW_COPILOT_STOPPED);
+});
+
+test('buildPrompt teaches the LLM about the fallbackTag sibling field', () => {
+  const snap = snapshot();
+  const prompt = buildPrompt({
+    sessionId: 'session-1',
+    workingDirectory: '/tmp/workspace',
+    flow: workflowFromSnapshot(snap),
+    scope: { kind: 'session' },
+    scopeNodes: snap.nodes,
+    thread: {
+      id: 'thread-1',
+      sessionId: 'session-1',
+      surface: 'sidebar',
+      ownerNodeId: undefined,
+      title: 'Workflow copilot',
+      agentType: 'opencode',
+      model: undefined,
+      scope: { kind: 'session' },
+      mode: 'edit',
+      autoApply: true,
+      autoRun: false,
+      externalSessionId: undefined,
+      createdAt: '2026-04-07T10:00:00.000Z',
+      updatedAt: '2026-04-07T10:00:00.000Z',
+    } satisfies WorkflowCopilotThread,
+    history: [],
+  });
+  assert.match(prompt, /sibling string field `fallbackTag`/);
+  assert.match(prompt, /global fallback chain/);
+  assert.match(prompt, /"complex".*"visual"|"visual".*"complex"/);
+});
+
+// ---------------------------------------------------------------------------
+// Repair loop integration: sendMessage should quietly re-ask the agent on a
+// parseable class of failures (parse, model, apply, execution) and decorate the
+// final visible assistant message with an "Auto-repaired…" warning.
+// See docs/plans/workflow-copilot-repair-loop.md for the design.
+// ---------------------------------------------------------------------------
+
+type RepairPrismaThread = {
+  id: string;
+  sessionId: string;
+  surface: string;
+  ownerKey: string;
+  ownerNodeId: null;
+  title: string;
+  agentType: string;
+  modelProviderId: string;
+  modelId: string;
+  scope: { kind: 'session' };
+  mode: string;
+  autoApply: boolean;
+  autoRun: boolean;
+  externalSessionId: null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function buildRepairPrismaStubs(thread: RepairPrismaThread) {
+  const messages: Array<Record<string, unknown>> = [];
+  const prisma = {
+    session: {
+      findUnique: async () => ({
+        id: thread.sessionId,
+        workspaceParentDirectory: null,
+        workspaceDirectoryName: null,
+      }),
+    },
+    workflowCopilotThread: {
+      findUnique: async ({ include }: { include?: unknown }) =>
+        include
+          ? { ...thread, messages, checkpoints: [] }
+          : thread,
+      update: async ({ data }: { data: Record<string, unknown> }) => ({ ...thread, ...data }),
+    },
+    workflowCopilotMessage: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const row = {
+          id: `message-${messages.length + 1}`,
+          createdAt: new Date('2026-04-03T10:05:00.000Z'),
+          updatedAt: new Date('2026-04-03T10:05:00.000Z'),
+          ...data,
+        };
+        messages.push(row);
+        return row;
+      },
+      findMany: async () => messages,
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        messages.find((entry) => entry.id === where.id) ?? null,
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = messages.find((entry) => entry.id === where.id);
+        if (!row) throw new Error('message not found');
+        Object.assign(row, data, { updatedAt: new Date('2026-04-03T10:06:00.000Z') });
+        return row;
+      },
+    },
+  };
+  return { prisma, messages };
+}
+
+function makeRepairThread(mode: 'ask' | 'edit' = 'ask'): RepairPrismaThread {
+  return {
+    id: 'thread-1',
+    sessionId: 'session-1',
+    surface: 'sidebar',
+    ownerKey: 'sidebar',
+    ownerNodeId: null,
+    title: 'Workflow copilot',
+    agentType: 'opencode',
+    modelProviderId: 'anthropic',
+    modelId: 'claude-4.5-sonnet',
+    scope: { kind: 'session' },
+    mode,
+    autoApply: false,
+    autoRun: false,
+    externalSessionId: null,
+    createdAt: new Date('2026-04-03T10:00:00.000Z'),
+    updatedAt: new Date('2026-04-03T10:00:00.000Z'),
+  };
+}
+
+test('sendMessage silently retries after a parse failure and decorates the final reply', async () => {
+  const thread = makeRepairThread('ask');
+  const { prisma, messages } = buildRepairPrismaStubs(thread);
+
+  const service = new WorkflowCopilotService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    stubCopilotAgents,
+    stubCopilotFlows,
+    stubCopilotControllers,
+    stubFileNodes as never,
+  );
+
+  let calls = 0;
+  (
+    service as unknown as {
+      runThread: () => Promise<unknown>;
+    }
+  ).runThread = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ok: false,
+        rawOutput: 'not json at all',
+        error: 'WORKFLOW_COPILOT_PARSE_FAILED',
+      };
+    }
+    return {
+      ok: true,
+      rawOutput:
+        '{"analysis":"Second try.","reply":"Here is the workflow overview.","summary":["Described the graph."],"warnings":[],"ops":[],"executions":[]}',
+      turn: {
+        analysis: 'Second try.',
+        reply: 'Here is the workflow overview.',
+        summary: ['Described the graph.'],
+        warnings: [],
+        ops: [],
+        executions: [],
+      },
+    };
+  };
+
+  const res = await service.sendMessage('session-1', 'thread-1', {
+    content: 'Describe the workflow.',
+    mode: 'ask',
+  });
+
+  assert.equal(calls, 2, 'runThread should be retried exactly once after parse failure');
+  assert.equal(res.assistantMessage.status, 'completed');
+  assert.equal(res.assistantMessage.content, 'Here is the workflow overview.');
+  // The final persisted row MUST expose the repair header as the first warning.
+  const warnings = res.assistantMessage.warnings ?? [];
+  assert.ok(warnings.length >= 1, `expected at least one warning, got: ${JSON.stringify(warnings)}`);
+  assert.match(warnings[0] ?? '', /Auto-repaired after 1 attempt\(s\)/);
+  assert.match(warnings[0] ?? '', /JSON parse failed/i);
+  // Sanity check: the assistant row actually has the DB-side warning set too.
+  const assistantRow = messages[1] as { warnings?: unknown } | undefined;
+  const rowWarnings = Array.isArray(assistantRow?.warnings) ? assistantRow?.warnings : [];
+  assert.match(String(rowWarnings[0] ?? ''), /Auto-repaired/);
+});
+
+test('sendMessage silently retries when a proposed model is absent from the live catalog', async () => {
+  const thread = makeRepairThread('edit');
+  const { prisma } = buildRepairPrismaStubs(thread);
+
+  // agents stub now exposes a catalog with anthropic/claude-4.5-sonnet only —
+  // the first LLM reply references an unavailable google model which must be
+  // flagged by detectTurnIssues and kick off the repair loop.
+  const agentsStub = {
+    runWorkflow: async () => {
+      throw new Error('stub runWorkflow should not be called');
+    },
+    listCatalogForPrompt: async (): Promise<AgentCatalog> => ({
+      providers: [
+        {
+          agentType: 'opencode',
+          providerID: 'anthropic',
+          label: 'Anthropic',
+          availability: 'ready',
+          models: [
+            { providerID: 'anthropic', modelID: 'claude-4.5-sonnet', label: 'Sonnet' },
+          ],
+        },
+      ],
+      fetchedAt: '2026-04-03T10:00:00.000Z',
+    }),
+  } as never;
+
+  const service = new WorkflowCopilotService(
+    prisma as never,
+    {
+      loadSnapshot: async () => snapshot(),
+    } as never,
+    {} as never,
+    agentsStub,
+    stubCopilotFlows,
+    stubCopilotControllers,
+    stubFileNodes as never,
+  );
+
+  let calls = 0;
+  (
+    service as unknown as {
+      runThread: (
+        session: unknown,
+        thread: unknown,
+        history: unknown,
+      ) => Promise<unknown>;
+    }
+  ).runThread = async (_session, _thread, history) => {
+    calls += 1;
+    // The second call must receive the synthetic user feedback turn in history.
+    if (calls === 2) {
+      const historyArr = history as Array<{ role: string; content: string }>;
+      const feedback = historyArr.find(
+        (msg) =>
+          msg.role === 'user' && /previous reply had the following issues/i.test(msg.content),
+      );
+      assert.ok(feedback, 'expected a synthetic user feedback turn in history');
+      assert.match(feedback!.content, /google.*gemini-1\.5-flash/);
+    }
+    if (calls === 1) {
+      return {
+        ok: true,
+        rawOutput: '{"analysis":"Pick a fallback model.","reply":"Using the google model.","summary":[],"warnings":[],"ops":[{"kind":"add_node","ref":"agent-node","type":"agent_step","position":{"x":0,"y":0},"content":{"agentType":"opencode","model":{"providerID":"google","modelID":"gemini-1.5-flash"}}}],"executions":[]}',
+        turn: {
+          analysis: 'Pick a fallback model.',
+          reply: 'Using the google model.',
+          summary: [],
+          warnings: [],
+          ops: [
+            {
+              kind: 'add_node',
+              ref: 'agent-node',
+              type: 'agent_step',
+              position: { x: 0, y: 0 },
+              content: {
+                agentType: 'opencode',
+                model: { providerID: 'google', modelID: 'gemini-1.5-flash' },
+              },
+            },
+          ],
+          executions: [],
+        },
+      };
+    }
+    // Second attempt: LLM picks the catalog entry. We keep autoApply off in the
+    // thread config so we don't have to set up full graph plumbing.
+    return {
+      ok: true,
+      rawOutput:
+        '{"analysis":"Fixed binding.","reply":"Using the catalog model now.","summary":[],"warnings":[],"ops":[],"executions":[]}',
+      turn: {
+        analysis: 'Fixed binding.',
+        reply: 'Using the catalog model now.',
+        summary: [],
+        warnings: [],
+        ops: [],
+        executions: [],
+      },
+    };
+  };
+
+  const res = await service.sendMessage('session-1', 'thread-1', {
+    content: 'Add a fallback agent node.',
+    mode: 'edit',
+  });
+
+  assert.equal(calls, 2, 'model-binding repair should succeed on the second attempt');
+  assert.equal(res.assistantMessage.status, 'completed');
+  assert.equal(res.assistantMessage.content, 'Using the catalog model now.');
+  const warnings = res.assistantMessage.warnings ?? [];
+  assert.match(warnings[0] ?? '', /Auto-repaired after 1 attempt\(s\)/);
+  assert.match(
+    warnings[0] ?? '',
+    /model google\/gemini-1\.5-flash not in catalog/,
+  );
+});
+
+test('sendMessage surfaces an "Auto-repair exhausted" warning when all attempts fail', async () => {
+  const thread = makeRepairThread('ask');
+  const { prisma } = buildRepairPrismaStubs(thread);
+
+  const service = new WorkflowCopilotService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    stubCopilotAgents,
+    stubCopilotFlows,
+    stubCopilotControllers,
+    stubFileNodes as never,
+  );
+
+  let calls = 0;
+  (service as unknown as { runThread: () => Promise<unknown> }).runThread = async () => {
+    calls += 1;
+    return {
+      ok: false,
+      rawOutput: 'still not json',
+      error: 'WORKFLOW_COPILOT_PARSE_FAILED',
+    };
+  };
+
+  const res = await service.sendMessage('session-1', 'thread-1', {
+    content: 'Describe the workflow.',
+    mode: 'ask',
+  });
+
+  // Default budget is 2 repairs → up to 3 total runThread invocations.
+  assert.equal(calls, 3, 'should exhaust the repair budget (initial + 2 retries)');
+  assert.equal(res.assistantMessage.status, 'error');
+  assert.equal(res.assistantMessage.error, 'WORKFLOW_COPILOT_PARSE_FAILED');
+  const warnings = res.assistantMessage.warnings ?? [];
+  assert.match(warnings[0] ?? '', /Auto-repair exhausted after 2 attempt\(s\)/);
+  assert.match(warnings[0] ?? '', /JSON parse failed/);
 });

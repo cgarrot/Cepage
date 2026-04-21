@@ -960,7 +960,13 @@ function normalizeStepNode(
     content && typeof content === 'object' && !Array.isArray(content)
       ? (content as Record<string, unknown>)
       : {};
-  const { agentType: rawType, model: rawModel, agentSelection: _rawSelection, ...rest } = raw;
+  const {
+    agentType: rawType,
+    model: rawModel,
+    agentSelection: _rawSelection,
+    fallbackTag: rawFallbackTag,
+    ...rest
+  } = raw;
   const selection = readNodeAgentSelection(raw);
   if (selection) {
     return {
@@ -972,6 +978,7 @@ function normalizeStepNode(
     readString((rawModel as { providerID?: unknown } | undefined)?.providerID) ?? null,
     readString((rawModel as { modelID?: unknown } | undefined)?.modelID) ?? null,
   );
+  const fallbackTag = readString(rawFallbackTag)?.trim();
   return {
     type: 'agent_step',
     content: applyNodeAgentSelection('agent_step', rest as GraphNode['content'], {
@@ -979,6 +986,7 @@ function normalizeStepNode(
       selection: {
         type: agentTypeSchemaOrThrow(readString(rawType) ?? fallback),
         ...(model ? { model } : {}),
+        ...(fallbackTag ? { fallbackTag } : {}),
       },
     }),
   };

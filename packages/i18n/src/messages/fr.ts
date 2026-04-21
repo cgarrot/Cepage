@@ -212,6 +212,24 @@ export const fr = {
       daemonBannerBody:
         'Les exécutions d\'agents sont transmises à un démon local (`cepage-daemon`). Tant qu\'aucun démon n\'est connecté, les runs déclenchés resteront en file d\'attente. Lancez le démon sur la machine qui doit exécuter les agents.',
       daemonBannerCommand: 'cepage-daemon start',
+      executionRunning: 'Exécution en cours',
+      executionCompleted: 'Exécution terminée',
+      executionFailed: 'Exécution échouée',
+      executionCancelled: 'Exécution annulée',
+      executionRunLabel: 'run #{index}',
+      executionPrimary: 'principal',
+      executionUnknownModel: 'modèle inconnu',
+      executionStreamingLabel: 'en direct',
+      executionStepsCount: '{count} étapes',
+      executionFallbackLine:
+        'Repli de {fromProvider}/{fromModel} → {toProvider}/{toModel} ({reason})',
+      executionFallbackReasonUnknown: 'raison inconnue',
+      executionFallbackBadge: 'repli · {count} tentatives',
+      executionFellBackShort: 'repli de {from} vers {to}',
+      executionCollapsedSummary: '{steps} · {duration} · {model}',
+      executionExpand: 'Afficher les détails',
+      executionCollapse: 'Masquer les détails',
+      modelStruckLabel: 'Modèle configuré — un repli a été déclenché',
     },
     files: {
       title: 'Fichiers du workspace',
@@ -913,6 +931,8 @@ export const fr = {
     agent_completed: 'Exécution terminée : {label}',
     agent_cancelled: 'Exécution annulée : {label}',
     agent_failed: 'Échec de l’exécution {label} : {detail}',
+    agent_fallback_switch:
+      'Repli de {fromProvider}/{fromModel} vers {toProvider}/{toModel} : {reason}',
     node_created: 'Nœud créé',
     node_updated: 'Nœud mis à jour',
     node_removed: 'Nœud supprimé',

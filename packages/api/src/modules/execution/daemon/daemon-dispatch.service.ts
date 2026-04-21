@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   formatAgentSelectionLabel,
   type AgentLifecycleStatus,
@@ -640,6 +641,12 @@ export class DaemonDispatchService {
       return;
     }
     const ctx = this.runs.get(jobId);
+    // Reactive model fallback. When the failing run has a fallback chain with
+    // a next entry and the error class is retryable, we requeue a sibling run
+    // instead of surfacing the failure to the user. The current (failed) run
+    // is still finalized below so the UI shows a clear audit trail of what
+    // was tried; the new run is linked via `retryOfRunId` for lineage.
+    const retryable = !!ctx && shouldRetryWithNextModel(ctx.payload, error);
     if (ctx && job.runId && job.sessionId) {
       ctx.streaming = false;
       await this.persistOutput(ctx, false, true);
@@ -722,9 +729,125 @@ export class DaemonDispatchService {
       }
     }
     this.runs.delete(jobId);
-    const status = await this.queue.failJob(job, leaseToken, error);
-    this.log.warn(`daemon reported failure for job ${jobId} (${status}): ${error}`);
+    if (retryable && ctx) {
+      // We're about to spawn a sibling AgentRun with the next model of the
+      // fallback chain. The sibling lives as its own queue job and carries its
+      // own attempts counter, so leaving the original job retryable would make
+      // the queue re-lease it, respawn the broken primary, and create another
+      // sibling at every attempt. Short-circuit the queue retry by marking the
+      // original job terminally failed (no backoff, no finishedAt reset), then
+      // enqueue the sibling via the supervisor.
+      await this.queue.failJobTerminal(job.id, leaseToken, error).catch((failError) => {
+        this.log.warn(
+          `daemon failJobTerminal failed for ${jobId}: ${
+            failError instanceof Error ? failError.message : String(failError)
+          }`,
+        );
+      });
+      this.log.warn(`daemon reported failure for job ${jobId} (failed, sibling spawned): ${error}`);
+      await this.requeueWithNextModel(ctx.payload, error).catch((requeueError) => {
+        this.log.error(
+          `[agent-fallback] requeue after run ${ctx.payload.runId} failed: ${
+            requeueError instanceof Error ? requeueError.message : String(requeueError)
+          }`,
+        );
+      });
+    } else {
+      const status = await this.queue.failJob(job, leaseToken, error);
+      this.log.warn(`daemon reported failure for job ${jobId} (${status}): ${error}`);
+    }
     void runtimeId;
+  }
+
+  /**
+   * Spawn a sibling AgentRun pointing at the next entry of the fallback chain
+   * and queue it. The caller has already finalized the failed run; we create a
+   * new row with a fresh runId, the next model, and link to the failed one via
+   * `retryOfRunId`. We reuse the original payload for prompt/parts/cwd/etc —
+   * only the runId and model change.
+   */
+  private async requeueWithNextModel(
+    failedPayload: AgentRunJobPayload,
+    error: string,
+  ): Promise<void> {
+    const chain = failedPayload.fallbackChain ?? [];
+    const nextIndex = (failedPayload.fallbackIndex ?? 0) + 1;
+    const nextEntry = chain[nextIndex];
+    if (!nextEntry) return;
+    const newRunId = randomUUID();
+    const startedAt = new Date();
+    await this.prisma.agentRun.create({
+      data: {
+        id: newRunId,
+        sessionId: failedPayload.sessionId,
+        executionId: failedPayload.executionId ?? null,
+        requestId: failedPayload.requestId ?? null,
+        agentType: nextEntry.agentType,
+        role: failedPayload.role,
+        status: 'booting',
+        wakeReason: failedPayload.wakeReason,
+        runtime: { kind: 'local_process', cwd: failedPayload.cwd } as object,
+        startedAt,
+        seedNodeIds: failedPayload.seedNodeIds,
+        rootNodeId: failedPayload.rootNodeId,
+        triggerNodeId: failedPayload.triggerNodeId ?? null,
+        stepNodeId: failedPayload.stepNodeId ?? null,
+        retryOfRunId: failedPayload.runId,
+        modelProviderId: nextEntry.providerID,
+        modelId: nextEntry.modelID,
+        outputText: '',
+        isStreaming: true,
+      },
+    });
+    if (failedPayload.executionId) {
+      await this.prisma.workflowExecution.update({
+        where: { id: failedPayload.executionId },
+        data: {
+          status: 'booting',
+          currentRunId: newRunId,
+          latestRunId: newRunId,
+          endedAt: null,
+          modelProviderId: nextEntry.providerID,
+          modelId: nextEntry.modelID,
+        },
+      });
+    }
+    const nextPayload: AgentRunJobPayload = {
+      ...failedPayload,
+      runId: newRunId,
+      type: nextEntry.agentType,
+      model: {
+        providerID: nextEntry.providerID,
+        modelID: nextEntry.modelID,
+      },
+      fallbackIndex: nextIndex,
+      startedAtIso: startedAt.toISOString(),
+    };
+    await this.supervisor.queueAgentRun(nextPayload);
+    this.log.log(
+      `[agent-fallback] run ${failedPayload.runId} failed with "${error}"; retrying as ${newRunId} ` +
+        `with ${nextEntry.providerID}/${nextEntry.modelID} (chain ${nextIndex + 1}/${chain.length})`,
+    );
+    // Surface the switch on the user-facing activity feed so the UI can
+    // render "Fell back from X → Y (reason)" inline with the execution
+    // block. We attach the event to the FAILED run (failedPayload.runId) so
+    // the execution selector can group it with the right siblings chain; the
+    // metadata carries the new runId for forward-navigation.
+    const activityEvent = buildFallbackActivityEvent({
+      failedPayload,
+      error,
+      nextEntry,
+      nextIndex,
+      chainLength: chain.length,
+      newRunId,
+    });
+    await this.activity.log(activityEvent).catch((activityError) => {
+      this.log.warn(
+        `[agent-fallback] activity.log failed for run ${failedPayload.runId}: ${
+          activityError instanceof Error ? activityError.message : String(activityError)
+        }`,
+      );
+    });
   }
 
   private async ensureJob(jobId: string, leaseToken: string) {
@@ -962,4 +1085,123 @@ function isCancelledError(error: string): boolean {
   return /^cancel/i.test(error)
     || /aborted/i.test(error)
     || error === 'AbortError';
+}
+
+/**
+ * Deny-list of error classes where falling back to another model is pointless
+ * (permanent / user-driven failures). Everything else is assumed retryable so
+ * transient upstream failures (5xx, rate limits, timeouts, daemon-side
+ * provider hiccups, missing adapters on this daemon, etc.) trigger the
+ * sibling model.
+ */
+const NON_RETRYABLE_ERROR_PATTERNS: RegExp[] = [
+  /^cancel/i,
+  /aborted/i,
+  /^AbortError$/,
+  /RUN_CANCELLED/,
+  // Authentication / authorization problems are the user's config to fix —
+  // trying the next provider would just fail with the same creds missing.
+  /\b401\b/,
+  /\b403\b/,
+  /unauthorized/i,
+  /forbidden/i,
+  /invalid[_\s-]?api[_\s-]?key/i,
+  /authentication/i,
+  // Schema / validation failures are deterministic.
+  /ZodError/,
+  /schema validation/i,
+];
+
+function isRetryableModelFailure(error: string): boolean {
+  if (!error) return false;
+  for (const pattern of NON_RETRYABLE_ERROR_PATTERNS) {
+    if (pattern.test(error)) return false;
+  }
+  return true;
+}
+
+/**
+ * Returns true when the current payload has a next fallback entry AND the
+ * error is classified retryable. Kept as a free function so it can be unit
+ * tested without spinning up the full dispatch service.
+ */
+export function shouldRetryWithNextModel(
+  payload: AgentRunJobPayload,
+  error: string,
+): boolean {
+  const chain = payload.fallbackChain ?? [];
+  const nextIndex = (payload.fallbackIndex ?? 0) + 1;
+  if (chain.length <= nextIndex) return false;
+  return isRetryableModelFailure(error);
+}
+
+export type FallbackActivityEventInput = {
+  failedPayload: AgentRunJobPayload;
+  error: string;
+  nextEntry: { agentType: string; providerID: string; modelID: string };
+  nextIndex: number;
+  chainLength: number;
+  newRunId: string;
+};
+
+/**
+ * Pure builder for the `activity.agent_fallback_switch` event logged when a
+ * sibling fallback job is spawned. Extracted so tests can lock down the
+ * canonical shape (`summaryKey`, `summaryParams`, `metadata.kind`, related
+ * nodes, etc.) without having to boot the whole NestJS dispatch service or
+ * a Prisma instance.
+ */
+export function buildFallbackActivityEvent(input: FallbackActivityEventInput): {
+  sessionId: string;
+  eventId: number;
+  actorType: 'agent';
+  actorId: string;
+  runId: string;
+  summary: string;
+  summaryKey: 'activity.agent_fallback_switch';
+  summaryParams: {
+    fromProvider: string;
+    fromModel: string;
+    toProvider: string;
+    toModel: string;
+    reason: string;
+  };
+  relatedNodeIds: string[];
+  metadata: {
+    kind: 'agent_fallback_switch';
+    nextRunId: string;
+    fallbackIndex: number;
+    fallbackChainLength: number;
+  };
+} {
+  const { failedPayload, error, nextEntry, nextIndex, chainLength, newRunId } = input;
+  const fromProvider = failedPayload.model?.providerID ?? '?';
+  const fromModel = failedPayload.model?.modelID ?? '?';
+  const toProvider = nextEntry.providerID;
+  const toModel = nextEntry.modelID;
+  return {
+    sessionId: failedPayload.sessionId,
+    eventId: 0,
+    actorType: 'agent',
+    actorId: failedPayload.runId,
+    runId: failedPayload.runId,
+    summary: `Fallback: ${fromProvider}/${fromModel} → ${toProvider}/${toModel}${
+      error ? ` (${error})` : ''
+    }`,
+    summaryKey: 'activity.agent_fallback_switch',
+    summaryParams: {
+      fromProvider,
+      fromModel,
+      toProvider,
+      toModel,
+      reason: error,
+    },
+    relatedNodeIds: failedPayload.ownerNodeId ? [failedPayload.ownerNodeId] : [],
+    metadata: {
+      kind: 'agent_fallback_switch',
+      nextRunId: newRunId,
+      fallbackIndex: nextIndex,
+      fallbackChainLength: chainLength,
+    },
+  };
 }

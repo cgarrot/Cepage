@@ -1,5 +1,7 @@
 import type {
+  AgentRun,
   GraphNode,
+  TimelineEntry,
   WorkflowCopilotApplySummary,
   WorkflowCopilotAttachment,
   WorkflowCopilotCheckpoint,
@@ -7,6 +9,7 @@ import type {
   WorkflowCopilotMessageRole,
   WorkflowCopilotMessageStatus,
   WorkflowCopilotScope,
+  WorkflowExecution,
 } from '@cepage/shared-core';
 import { readWorkflowArtifactContent } from '@cepage/shared-core';
 
@@ -162,6 +165,61 @@ export type ChatTimelineCopilotCheckpoint = {
   checkpoint: WorkflowCopilotCheckpoint;
 };
 
+/**
+ * One entry of the fallback chain lineage for a workflow execution. The chain
+ * is built from AgentRun rows linked by `retryOfRunId` — the primary run is
+ * the one without `retryOfRunId`, then siblings follow in chronological order.
+ */
+export type ChatTimelineExecutionSibling = {
+  runId: string;
+  model?: ChatModelRef;
+  status: AgentRun['status'];
+  startedAt?: string;
+  endedAt?: string;
+  isPrimary: boolean;
+};
+
+/**
+ * Live fallback-switch event (from the activity feed with
+ * `summaryKey: 'activity.agent_fallback_switch'`), surfaced inline in the
+ * execution block so the user sees exactly which model was swapped and why.
+ */
+export type ChatTimelineExecutionFallback = {
+  id: string;
+  at: string;
+  fromModel?: ChatModelRef;
+  toModel?: ChatModelRef;
+  reason: string;
+};
+
+/**
+ * Unified execution block that aggregates every AgentRun belonging to a
+ * single `executionId` (primary + fallback siblings), the agent_step nodes
+ * attached to those runs, and any fallback-switch activity events. The chat
+ * shell renders this as a single collapsible card, replacing the individual
+ * spawn/step blocks that would otherwise scatter across the transcript.
+ */
+export type ChatTimelineExecution = {
+  kind: 'execution';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  agentType: string;
+  configuredModel?: ChatModelRef;
+  calledModel?: ChatModelRef;
+  status: AgentRun['status'];
+  isStreaming: boolean;
+  output: string;
+  siblings: readonly ChatTimelineExecutionSibling[];
+  steps: readonly ChatTimelineAgentStep[];
+  fallbackEvents: readonly ChatTimelineExecutionFallback[];
+  triggerNodeId?: string;
+  stepNodeId?: string;
+  startedAt?: string;
+  endedAt?: string;
+  currentRunId: string;
+};
+
 export type ChatTimelineItem =
   | ChatTimelineHumanMessage
   | ChatTimelineAgentMessage
@@ -171,7 +229,8 @@ export type ChatTimelineItem =
   | ChatTimelineAgentOutput
   | ChatTimelineFile
   | ChatTimelineCopilotMessage
-  | ChatTimelineCopilotCheckpoint;
+  | ChatTimelineCopilotCheckpoint
+  | ChatTimelineExecution;
 
 const CHAT_NODE_TYPES: ReadonlySet<GraphNode['type']> = new Set([
   'human_message',
@@ -414,6 +473,193 @@ export function selectChatConversation(nodes: readonly GraphNode[]): ChatTimelin
   return selectChatTimeline(nodes).filter((item) => item.kind !== 'agent_output');
 }
 
+const EXECUTION_ACTIVE_STATUSES: ReadonlySet<AgentRun['status']> = new Set([
+  'pending',
+  'booting',
+  'running',
+  'waiting_input',
+  'paused',
+]);
+
+function normalizeAgentModel(model: { providerID: string; modelID: string } | undefined): ChatModelRef | undefined {
+  if (!model) return undefined;
+  return { providerId: model.providerID, modelId: model.modelID };
+}
+
+function pickExecutionCurrentRun(
+  sortedRuns: readonly AgentRun[],
+  execution: WorkflowExecution | undefined,
+): AgentRun | undefined {
+  if (sortedRuns.length === 0) return undefined;
+  const byId = new Map(sortedRuns.map((run) => [run.id, run]));
+  if (execution?.currentRunId && byId.has(execution.currentRunId)) {
+    return byId.get(execution.currentRunId);
+  }
+  if (execution?.latestRunId && byId.has(execution.latestRunId)) {
+    return byId.get(execution.latestRunId);
+  }
+  const active = sortedRuns.find((run) => EXECUTION_ACTIVE_STATUSES.has(run.status));
+  if (active) return active;
+  return sortedRuns[sortedRuns.length - 1];
+}
+
+function readFallbackParams(entry: TimelineEntry): {
+  fromProvider?: string;
+  fromModel?: string;
+  toProvider?: string;
+  toModel?: string;
+  reason?: string;
+} {
+  const params = entry.summaryParams ?? {};
+  const read = (key: string): string | undefined => {
+    const value = (params as Record<string, unknown>)[key];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  };
+  return {
+    fromProvider: read('fromProvider'),
+    fromModel: read('fromModel'),
+    toProvider: read('toProvider'),
+    toModel: read('toModel'),
+    reason: read('reason'),
+  };
+}
+
+function buildExecutionSiblings(sortedRuns: readonly AgentRun[]): ChatTimelineExecutionSibling[] {
+  const primary = sortedRuns.find((run) => !run.retryOfRunId) ?? sortedRuns[0];
+  return sortedRuns.map((run) => {
+    const entry: ChatTimelineExecutionSibling = {
+      runId: run.id,
+      status: run.status,
+      isPrimary: primary != null && run.id === primary.id,
+    };
+    const model = normalizeAgentModel(run.model);
+    if (model) entry.model = model;
+    if (run.startedAt) entry.startedAt = run.startedAt;
+    if (run.endedAt) entry.endedAt = run.endedAt;
+    return entry;
+  });
+}
+
+function buildExecutionFallbackEvents(
+  sortedRuns: readonly AgentRun[],
+  activity: readonly TimelineEntry[],
+): ChatTimelineExecutionFallback[] {
+  if (sortedRuns.length === 0 || activity.length === 0) return [];
+  const runIds = new Set(sortedRuns.map((run) => run.id));
+  const out: ChatTimelineExecutionFallback[] = [];
+  for (const entry of activity) {
+    if (entry.summaryKey !== 'activity.agent_fallback_switch') continue;
+    if (!entry.runId || !runIds.has(entry.runId)) continue;
+    const params = readFallbackParams(entry);
+    const fromModel =
+      params.fromProvider && params.fromModel
+        ? { providerId: params.fromProvider, modelId: params.fromModel }
+        : undefined;
+    const toModel =
+      params.toProvider && params.toModel
+        ? { providerId: params.toProvider, modelId: params.toModel }
+        : undefined;
+    const event: ChatTimelineExecutionFallback = {
+      id: entry.id,
+      at: entry.timestamp,
+      reason: params.reason ?? entry.summary ?? '',
+    };
+    if (fromModel) event.fromModel = fromModel;
+    if (toModel) event.toModel = toModel;
+    out.push(event);
+  }
+  out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1));
+  return out;
+}
+
+function buildExecutionItem(
+  executionId: string,
+  runs: readonly AgentRun[],
+  execution: WorkflowExecution | undefined,
+  nodesById: ReadonlyMap<string, GraphNode>,
+  steps: readonly ChatTimelineAgentStep[],
+  activity: readonly TimelineEntry[],
+): ChatTimelineExecution | null {
+  if (runs.length === 0 && !execution) return null;
+
+  const sortedRuns = [...runs].sort((a, b) => {
+    const aAt = a.startedAt ?? '';
+    const bAt = b.startedAt ?? '';
+    if (aAt !== bAt) return aAt < bAt ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  const primary = sortedRuns.find((run) => !run.retryOfRunId) ?? sortedRuns[0];
+  const current = pickExecutionCurrentRun(sortedRuns, execution) ?? primary;
+  if (!current) return null;
+
+  const stepNode = current.stepNodeId ? nodesById.get(current.stepNodeId) : undefined;
+  const rootNode = current.rootNodeId ? nodesById.get(current.rootNodeId) : undefined;
+  const configuredModel =
+    readModelRef((stepNode?.content as { model?: unknown } | undefined)?.model) ??
+    readModelRef((rootNode?.content as { model?: unknown } | undefined)?.model) ??
+    normalizeAgentModel(primary?.model);
+  const calledModel = normalizeAgentModel(current.model);
+
+  const agentType = current.type ?? execution?.type ?? primary?.type ?? 'opencode';
+  const status = current.status ?? execution?.status ?? 'pending';
+  const isStreaming = current.isStreaming === true;
+  const output = typeof current.outputText === 'string' ? current.outputText : '';
+  const createdAt =
+    primary?.startedAt ??
+    execution?.startedAt ??
+    execution?.createdAt ??
+    current.startedAt ??
+    new Date(0).toISOString();
+
+  // Sort steps so the UI sees them in chronological order. Ties broken by id
+  // for deterministic output (matches compareItems semantics).
+  const sortedSteps = [...steps].sort((a, b) => {
+    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const lastEnded = sortedRuns
+    .map((run) => run.endedAt)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0))[0];
+
+  const item: ChatTimelineExecution = {
+    kind: 'execution',
+    id: executionId,
+    createdAt,
+    actor: { kind: 'agent', agentType, agentId: current.id },
+    agentType,
+    status,
+    isStreaming,
+    output,
+    siblings: buildExecutionSiblings(sortedRuns),
+    steps: sortedSteps,
+    fallbackEvents: buildExecutionFallbackEvents(sortedRuns, activity),
+    currentRunId: current.id,
+  };
+  if (configuredModel) item.configuredModel = configuredModel;
+  if (calledModel) item.calledModel = calledModel;
+  const triggerNodeId = current.triggerNodeId ?? execution?.triggerNodeId;
+  if (triggerNodeId) item.triggerNodeId = triggerNodeId;
+  const stepNodeId = current.stepNodeId ?? execution?.stepNodeId;
+  if (stepNodeId) item.stepNodeId = stepNodeId;
+  if (primary?.startedAt) item.startedAt = primary.startedAt;
+  if (lastEnded) item.endedAt = lastEnded;
+  return item;
+}
+
+function executionIdForOwnedNode(
+  nodeId: string,
+  runsByExecution: ReadonlyMap<string, AgentRun[]>,
+): string | undefined {
+  for (const [executionId, runs] of runsByExecution) {
+    for (const run of runs) {
+      if (run.rootNodeId === nodeId || run.stepNodeId === nodeId) return executionId;
+    }
+  }
+  return undefined;
+}
+
 function buildCopilotMessageItem(message: WorkflowCopilotMessage): ChatTimelineCopilotMessage {
   const text = message.content ?? '';
   const summary = Array.isArray(message.summary) ? message.summary : [];
@@ -476,8 +722,82 @@ export function selectUnifiedChatTimeline(input: {
   nodes: readonly GraphNode[];
   copilotMessages?: readonly WorkflowCopilotMessage[];
   copilotCheckpoints?: readonly WorkflowCopilotCheckpoint[];
+  agentRuns?: Readonly<Record<string, AgentRun>>;
+  executions?: Readonly<Record<string, WorkflowExecution>>;
+  activity?: readonly TimelineEntry[];
 }): ChatTimelineItem[] {
-  const items = selectChatTimeline(input.nodes);
+  const runsArr: readonly AgentRun[] = input.agentRuns ? Object.values(input.agentRuns) : [];
+  const executionsIndex = input.executions ?? {};
+  const activity = input.activity ?? [];
+
+  // Index runs by executionId. Only executions that have at least one run are
+  // promoted to a ChatTimelineExecution block — executions without runs keep
+  // the legacy "spawn → step → output" rendering so the UI still shows the
+  // designed workflow before it has been kicked off.
+  const runsByExecution = new Map<string, AgentRun[]>();
+  const executionByRunId = new Map<string, string>();
+  for (const run of runsArr) {
+    if (!run.executionId) continue;
+    const arr = runsByExecution.get(run.executionId) ?? [];
+    arr.push(run);
+    runsByExecution.set(run.executionId, arr);
+    executionByRunId.set(run.id, run.executionId);
+  }
+
+  const rawItems = selectChatTimeline(input.nodes);
+
+  // Back-compat short-circuit: when no runs are provided we keep the exact
+  // output shape the existing tests rely on — no execution blocks, every
+  // graph node renders standalone as before.
+  const items: ChatTimelineItem[] = [];
+  const stepsByExecution = new Map<string, ChatTimelineAgentStep[]>();
+
+  if (runsByExecution.size === 0) {
+    items.push(...rawItems);
+  } else {
+    for (const item of rawItems) {
+      if (item.kind === 'agent_spawn') {
+        const creatorAgentId = item.actor.kind === 'agent' ? item.actor.agentId : undefined;
+        const executionId =
+          (creatorAgentId ? executionByRunId.get(creatorAgentId) : undefined) ??
+          executionIdForOwnedNode(item.id, runsByExecution);
+        if (executionId) continue; // subsumed into the execution block
+        items.push(item);
+        continue;
+      }
+      if (item.kind === 'agent_step') {
+        const creatorAgentId = item.actor.kind === 'agent' ? item.actor.agentId : undefined;
+        const executionId =
+          (creatorAgentId ? executionByRunId.get(creatorAgentId) : undefined) ??
+          executionIdForOwnedNode(item.id, runsByExecution);
+        if (executionId) {
+          const arr = stepsByExecution.get(executionId) ?? [];
+          arr.push(item);
+          stepsByExecution.set(executionId, arr);
+          continue;
+        }
+        items.push(item);
+        continue;
+      }
+      items.push(item);
+    }
+
+    const nodesById = new Map(input.nodes.map((n) => [n.id, n]));
+    for (const [executionId, runs] of runsByExecution) {
+      const execution = executionsIndex[executionId];
+      const steps = stepsByExecution.get(executionId) ?? [];
+      const block = buildExecutionItem(
+        executionId,
+        runs,
+        execution,
+        nodesById,
+        steps,
+        activity,
+      );
+      if (block) items.push(block);
+    }
+  }
+
   const messages = input.copilotMessages ?? [];
   for (const message of messages) {
     items.push(buildCopilotMessageItem(message));

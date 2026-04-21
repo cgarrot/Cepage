@@ -347,7 +347,10 @@ export function resolveNodeSelection(
     fallback,
   });
   if (!selection) return null;
-  return selection.model ? { type: selection.type, model: selection.model } : { type: selection.type };
+  const next: AgentSelection = { type: selection.type };
+  if (selection.model) next.model = selection.model;
+  if (selection.fallbackTag) next.fallbackTag = selection.fallbackTag;
+  return next;
 }
 
 export function findLatestWorkflowBound(

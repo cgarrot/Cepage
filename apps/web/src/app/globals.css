@@ -1,0 +1,343 @@
+/* Fallback before ThemeProvider sets data attributes — Cabernet defaults */
+:root {
+  color-scheme: dark light;
+  --z-bg-app: #1a0e10;
+  --z-bg-canvas: #1a0e10;
+  --z-bg-sidebar: #150b0d;
+  --z-fg: #f3e8ec;
+  --z-fg-muted: #a89097;
+  --z-fg-subtle: #826a73;
+  --z-border: #3a2126;
+  --z-accent: #a83246;
+  --z-accent-strong: #c94a5f;
+  --z-flow-dot: #3a2126;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+ * Effective mode neutrals (lights/darks decoupled from cepage)
+ * ============================================================ */
+
+html[data-theme-effective='dark'] {
+  color-scheme: dark;
+
+  --z-bg-app: #160a0c;
+  --z-bg-canvas: #1a0e10;
+  --z-bg-sidebar: #120709;
+  --z-bg-panel: rgba(36, 18, 22, 0.92);
+  --z-bg-panel-border: rgba(190, 110, 130, 0.18);
+  --z-bg-panel-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+
+  --z-fg: #f7eaee;
+  --z-fg-muted: #b89aa2;
+  --z-fg-subtle: #8a7079;
+  --z-fg-dim: #a4848e;
+  --z-fg-status: #e1cdd3;
+  --z-fg-section: #b89aa2;
+  --z-fg-disabled: #6b545b;
+
+  --z-border: #3a2126;
+  --z-border-soft: rgba(190, 110, 130, 0.18);
+  --z-border-muted: rgba(255, 230, 235, 0.08);
+  --z-border-input: rgba(190, 110, 130, 0.28);
+  --z-border-lang: rgba(190, 110, 130, 0.25);
+  --z-border-lang-active: color-mix(in srgb, var(--z-accent) 45%, transparent);
+
+  --z-lang-bg: rgba(255, 230, 235, 0.04);
+  --z-lang-bg-active: rgba(74, 19, 30, 0.65);
+  --z-lang-fg: #f3dde2;
+
+  --z-btn-primary-bg: rgba(58, 20, 28, 0.85);
+  --z-btn-primary-border: color-mix(in srgb, var(--z-accent) 32%, transparent);
+  --z-btn-primary-fg: #ffe5ec;
+
+  --z-btn-solid-bg: var(--z-accent);
+  --z-btn-solid-border: var(--z-accent-strong);
+  --z-btn-solid-fg: #fff5f7;
+
+  --z-btn-ghost-bg: rgba(255, 230, 235, 0.04);
+  --z-btn-ghost-border: rgba(255, 230, 235, 0.12);
+  --z-btn-ghost-fg: #f3dde2;
+
+  --z-input-bg: rgba(20, 10, 12, 0.9);
+  --z-label-fg: #ffe5ec;
+  --z-hint-fg: #9a8088;
+
+  --z-overlay: rgba(15, 6, 8, 0.74);
+  --z-dialog-border: rgba(190, 110, 130, 0.24);
+  --z-dialog-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  --z-dialog-gradient-top: rgba(45, 22, 27, 0.98);
+  --z-dialog-gradient-bot: rgba(25, 12, 15, 0.98);
+  --z-dialog-body: #b89aa2;
+
+  --z-section-bg: rgba(255, 230, 235, 0.03);
+  --z-section-border: rgba(255, 230, 235, 0.08);
+  --z-pending-bg: rgba(74, 19, 30, 0.4);
+  --z-pending-border: color-mix(in srgb, var(--z-accent) 28%, transparent);
+  --z-pending-fg: #ffd9e1;
+
+  --z-menu-bg: rgba(22, 10, 12, 0.98);
+  --z-menu-border: rgba(190, 110, 130, 0.22);
+  --z-menu-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  --z-menu-header-shade: linear-gradient(
+    180deg,
+    rgba(80, 28, 38, 0.35) 0%,
+    rgba(22, 10, 12, 0) 100%
+  );
+  --z-menu-title: #fff1f4;
+  --z-menu-item-bg: rgba(255, 230, 235, 0.02);
+  --z-menu-desc: #b89aa2;
+
+  --z-branch-fg: #ffb5c1;
+
+  --z-sidebar-heading: #fff1f4;
+
+  --z-flow-dot: #3a2126;
+
+  --z-node-fg: #f7eaee;
+  --z-node-border: #4a2a30;
+  --z-node-border-selected: var(--z-accent);
+  --z-node-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --z-node-shadow-selected:
+    0 0 0 1px color-mix(in srgb, var(--z-accent) 30%, transparent), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --z-node-header-border: rgba(255, 230, 235, 0.08);
+  --z-node-type-spawn: var(--z-accent-strong);
+  --z-node-type-default: var(--z-accent);
+  --z-node-status-ok: #a89097;
+  --z-node-status-spawn-fg: #ffe1e7;
+  --z-node-status-spawn-bg: color-mix(in srgb, var(--z-accent) 14%, transparent);
+  --z-node-status-spawn-border: color-mix(in srgb, var(--z-accent) 28%, transparent);
+  --z-node-error-fg: #fda4a4;
+  --z-node-run-bg: #2a131a;
+  --z-node-run-border: #5a2832;
+  --z-node-run-spawn-bg: #3a1a22;
+  --z-node-run-spawn-border: var(--z-accent-strong);
+  --z-node-spawn-card-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--z-accent) 18%, transparent) 0%,
+    rgba(35, 16, 20, 0.2) 100%
+  );
+  --z-node-spawn-card-border: color-mix(in srgb, var(--z-accent) 28%, transparent);
+  --z-node-spawn-label: color-mix(in srgb, var(--z-fg-muted) 70%, var(--z-accent) 30%);
+  --z-node-spawn-title: #fff1f4;
+  --z-node-spawn-path: #b89aa2;
+  --z-node-chip-fg: #f3dde2;
+  --z-node-hint-bg: rgba(18, 8, 10, 0.55);
+  --z-node-hint-border: rgba(255, 230, 235, 0.06);
+  --z-node-hint-fg: #b89aa2;
+  --z-node-textarea-bg: rgba(15, 7, 9, 0.72);
+  --z-node-id-fg: #826a73;
+
+  --z-node-grad-default: linear-gradient(180deg, #25131a 0%, #190b10 100%);
+  --z-node-grad-spawn: linear-gradient(180deg, #3a1a22 0%, #1d0c12 100%);
+  --z-node-grad-error: linear-gradient(180deg, #3a1318 0%, #1a0b0d 100%);
+
+  --z-ui-kit-btn-bg: #1d0d11;
+  --z-ui-kit-btn-border: #3a2126;
+  --z-ui-kit-btn-fg: #f3dde2;
+
+  /* React Flow overrides */
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--z-flow-dot);
+  --xy-edge-stroke: rgba(200, 160, 170, 0.35);
+  --xy-edge-stroke-selected: var(--z-accent);
+  --xy-connectionline-stroke: var(--z-accent);
+  --xy-node-color: transparent;
+  --xy-node-border: none;
+  --xy-node-background-color: transparent;
+  --xy-handle-background-color: var(--z-accent);
+  --xy-handle-border-color: var(--z-bg-canvas);
+  --xy-minimap-background-color: rgba(20, 10, 12, 0.9);
+  --xy-minimap-node-background-color: rgba(190, 110, 130, 0.35);
+  --xy-controls-button-background-color: rgba(45, 22, 27, 0.95);
+  --xy-controls-button-background-color-hover: rgba(60, 30, 38, 0.98);
+  --xy-controls-button-color: var(--z-fg);
+  --xy-controls-button-border-color: rgba(190, 110, 130, 0.25);
+  --xy-controls-box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --xy-selection-background-color: color-mix(in srgb, var(--z-accent) 12%, transparent);
+  --xy-selection-border: 1px dotted color-mix(in srgb, var(--z-accent) 45%, transparent);
+}
+
+html[data-theme-effective='light'] {
+  color-scheme: light;
+
+  --z-bg-app: #faf6ef;
+  --z-bg-canvas: #f6f0e3;
+  --z-bg-sidebar: #fff9ed;
+  --z-bg-panel: rgba(255, 250, 240, 0.94);
+  --z-bg-panel-border: rgba(120, 90, 40, 0.14);
+  --z-bg-panel-shadow: 0 18px 40px rgba(120, 90, 40, 0.12);
+
+  --z-fg: #2a230f;
+  --z-fg-muted: #6a5a36;
+  --z-fg-subtle: #8a7846;
+  --z-fg-dim: #8a7846;
+  --z-fg-status: #4a3f1c;
+  --z-fg-section: #6a5a36;
+  --z-fg-disabled: #b8a878;
+
+  --z-border: #e7dcc1;
+  --z-border-soft: rgba(120, 90, 40, 0.12);
+  --z-border-muted: rgba(120, 90, 40, 0.08);
+  --z-border-input: rgba(120, 90, 40, 0.2);
+  --z-border-lang: rgba(120, 90, 40, 0.18);
+  --z-border-lang-active: var(--z-accent);
+
+  --z-lang-bg: rgba(120, 90, 40, 0.05);
+  --z-lang-bg-active: rgba(201, 169, 110, 0.22);
+  --z-lang-fg: #3a3010;
+
+  --z-btn-primary-bg: rgba(201, 169, 110, 0.24);
+  --z-btn-primary-border: rgba(184, 134, 11, 0.4);
+  --z-btn-primary-fg: #2a230f;
+
+  --z-btn-solid-bg: var(--z-accent-strong);
+  --z-btn-solid-border: var(--z-accent);
+  --z-btn-solid-fg: #fffdf6;
+
+  --z-btn-ghost-bg: rgba(120, 90, 40, 0.05);
+  --z-btn-ghost-border: rgba(120, 90, 40, 0.14);
+  --z-btn-ghost-fg: #3a3010;
+
+  --z-input-bg: #fffdf6;
+  --z-label-fg: #2a230f;
+  --z-hint-fg: #8a7846;
+
+  --z-overlay: rgba(40, 30, 10, 0.32);
+  --z-dialog-border: rgba(120, 90, 40, 0.14);
+  --z-dialog-shadow: 0 28px 80px rgba(120, 90, 40, 0.18);
+  --z-dialog-gradient-top: rgba(255, 252, 244, 0.98);
+  --z-dialog-gradient-bot: rgba(247, 240, 224, 0.98);
+  --z-dialog-body: #6a5a36;
+
+  --z-section-bg: rgba(120, 90, 40, 0.05);
+  --z-section-border: rgba(120, 90, 40, 0.1);
+  --z-pending-bg: rgba(201, 169, 110, 0.18);
+  --z-pending-border: rgba(184, 134, 11, 0.3);
+  --z-pending-fg: #2a230f;
+
+  --z-menu-bg: rgba(255, 252, 244, 0.98);
+  --z-menu-border: rgba(120, 90, 40, 0.14);
+  --z-menu-shadow: 0 22px 60px rgba(120, 90, 40, 0.15);
+  --z-menu-header-shade: linear-gradient(
+    180deg,
+    rgba(241, 232, 208, 0.9) 0%,
+    rgba(255, 252, 244, 0) 100%
+  );
+  --z-menu-title: #2a230f;
+  --z-menu-item-bg: rgba(120, 90, 40, 0.05);
+  --z-menu-desc: #8a7846;
+
+  --z-branch-fg: #856315;
+
+  --z-sidebar-heading: #2a230f;
+
+  --z-flow-dot: #d6c79e;
+
+  --z-node-fg: #2a230f;
+  --z-node-border: #d6c79e;
+  --z-node-border-selected: var(--z-accent);
+  --z-node-shadow: 0 8px 24px rgba(120, 90, 40, 0.14);
+  --z-node-shadow-selected: 0 0 0 1px rgba(184, 134, 11, 0.4), 0 10px 30px rgba(120, 90, 40, 0.18);
+  --z-node-header-border: rgba(120, 90, 40, 0.1);
+  --z-node-type-spawn: #856315;
+  --z-node-type-default: #6a5a36;
+  --z-node-status-ok: #8a7846;
+  --z-node-status-spawn-fg: #4a3a10;
+  --z-node-status-spawn-bg: rgba(201, 169, 110, 0.18);
+  --z-node-status-spawn-border: rgba(184, 134, 11, 0.28);
+  --z-node-error-fg: #b91c1c;
+  --z-node-run-bg: #fbf3df;
+  --z-node-run-border: #d6c79e;
+  --z-node-run-spawn-bg: #f7e9c4;
+  --z-node-run-spawn-border: var(--z-accent);
+  --z-node-spawn-card-bg: linear-gradient(
+    180deg,
+    rgba(201, 169, 110, 0.16) 0%,
+    rgba(247, 240, 224, 0.85) 100%
+  );
+  --z-node-spawn-card-border: rgba(184, 134, 11, 0.28);
+  --z-node-spawn-label: #6a5a36;
+  --z-node-spawn-title: #2a230f;
+  --z-node-spawn-path: #8a7846;
+  --z-node-chip-fg: #3a3010;
+  --z-node-hint-bg: rgba(247, 240, 224, 0.9);
+  --z-node-hint-border: rgba(120, 90, 40, 0.1);
+  --z-node-hint-fg: #8a7846;
+  --z-node-textarea-bg: rgba(255, 252, 244, 0.85);
+  --z-node-id-fg: #b8a878;
+
+  --z-node-grad-default: linear-gradient(180deg, #fffdf6 0%, #f4ebd2 100%);
+  --z-node-grad-spawn: linear-gradient(180deg, #fbf3df 0%, #efe1ba 100%);
+  --z-node-grad-error: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+
+  --z-ui-kit-btn-bg: #f4ebd2;
+  --z-ui-kit-btn-border: #d6c79e;
+  --z-ui-kit-btn-fg: #2a230f;
+
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--z-flow-dot);
+  --xy-edge-stroke: rgba(120, 90, 40, 0.3);
+  --xy-edge-stroke-selected: var(--z-accent);
+  --xy-connectionline-stroke: var(--z-accent);
+  --xy-handle-background-color: var(--z-accent);
+  --xy-handle-border-color: #fffdf6;
+  --xy-minimap-background-color: rgba(255, 252, 244, 0.96);
+  --xy-minimap-node-background-color: rgba(184, 134, 11, 0.35);
+  --xy-controls-button-background-color: #fffdf6;
+  --xy-controls-button-background-color-hover: #f4ebd2;
+  --xy-controls-button-color: #2a230f;
+  --xy-controls-button-border-color: #e7dcc1;
+  --xy-controls-box-shadow: 0 4px 16px rgba(120, 90, 40, 0.12);
+  --xy-selection-background-color: rgba(184, 134, 11, 0.12);
+  --xy-selection-border: 1px dotted rgba(184, 134, 11, 0.5);
+}
+
+/* ============================================================
+ * Cepage accents — wine-themed palettes layered on top of mode
+ * ============================================================ */
+
+/* Cabernet — deep red wine, designed for dark mode */
+html[data-cepage='cabernet'] {
+  --z-accent: #a83246;
+  --z-accent-strong: #c94a5f;
+  --z-accent-soft: rgba(168, 50, 70, 0.18);
+  --z-accent-glow: 0 0 24px rgba(168, 50, 70, 0.35);
+}
+
+/* Chardonnay — pale gold / champagne, designed for light mode */
+html[data-cepage='chardonnay'] {
+  --z-accent: #b8860b;
+  --z-accent-strong: #c9a96e;
+  --z-accent-soft: rgba(184, 134, 11, 0.16);
+  --z-accent-glow: 0 0 24px rgba(184, 134, 11, 0.25);
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--z-bg-app);
+}
+
+body {
+  color: var(--z-fg);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

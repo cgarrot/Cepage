@@ -1,0 +1,31 @@
+{
+  "name": "@cepage/daemon",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "bin": {
+    "cepage-daemon": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node ../../scripts/run-daemon-dev.mjs",
+    "start": "node dist/cli.js start",
+    "lint": "eslint src --max-warnings=0",
+    "clean": "rm -rf dist",
+    "test": "pnpm build && node --test dist/__tests__/*.test.js"
+  },
+  "dependencies": {
+    "@cepage/agent-core": "workspace:*",
+    "@cepage/shared-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

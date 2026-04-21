@@ -1,0 +1,11 @@
+export { ChatComposer } from './ChatComposer';
+export { ChatHeader } from './ChatHeader';
+export { ChatShell } from './ChatShell';
+export { ChatTranscript } from './ChatTranscript';
+export { FileViewer } from './FileViewer';
+export { Resizer } from './Resizer';
+export { SessionsSidebar } from './SessionsSidebar';
+export { ThemeToggle } from './ThemeToggle';
+export { WorkspaceFilesPanel } from './WorkspaceFilesPanel';
+export { WorkspaceTabs } from './WorkspaceTabs';
+export type { ChatShellOpenStudioInput, ChatShellProps } from './types';

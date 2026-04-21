@@ -1,0 +1,33 @@
+# Build artifacts regenerated INSIDE the image
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.cache
+**/*.tsbuildinfo
+
+# VCS and IDE
+.git
+.gitignore
+.github
+.vscode
+.idea
+.cursor
+
+# Local env (injected via compose)
+.env
+.env.*
+!.env.example
+
+# Docker metadata itself (not needed in the resolved build context)
+docker-compose*.yml
+
+# Logs and local outputs
+*.log
+coverage
+.DS_Store
+.pnpm-store
+test-results
+playwright-report
+status/workflow-real-tests
+status/opencode-smoke

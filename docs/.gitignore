@@ -1,0 +1,25 @@
+# Ignore all internal product specs — not for open source
+00-*.md
+01-*.md
+02-*.md
+03-*.md
+04-*.md
+05-*.md
+06-*.md
+07-*.md
+08-*.md
+09-*.md
+10-*.md
+
+# Ignore internal directories
+status/
+
+# Ignore private content
+workflow-prompt-library/private/
+
+# Keep the public workflow prompt library (used by code)
+!workflow-prompt-library/
+!workflow-prompt-library/**/*
+
+# Keep the root README (public index)
+!README.md

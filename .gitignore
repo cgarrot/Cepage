@@ -1,0 +1,28 @@
+node_modules
+dist
+.next
+.turbo
+*.log
+.env
+.env.*
+!.env.example
+.env.local
+.DS_Store
+coverage
+*.tsbuildinfo
+.pnpm-store
+
+# Local-only working dirs (test runs, smoke outputs, IDE state).
+# Sources of truth that used to live here have moved to docs/status/.
+status/
+test-results/
+playwright-report/
+.cursor/
+.vscode/
+.idea/
+
+# Internal agent tooling (Sisyphus planner, notepads, evidence)
+.sisyphus/
+
+# Private / personal scripts — kept locally, never committed
+private-scripts/

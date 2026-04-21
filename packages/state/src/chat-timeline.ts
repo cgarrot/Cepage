@@ -1,0 +1,515 @@
+import type {
+  GraphNode,
+  WorkflowCopilotApplySummary,
+  WorkflowCopilotAttachment,
+  WorkflowCopilotCheckpoint,
+  WorkflowCopilotMessage,
+  WorkflowCopilotMessageRole,
+  WorkflowCopilotMessageStatus,
+  WorkflowCopilotScope,
+} from '@cepage/shared-core';
+import { readWorkflowArtifactContent } from '@cepage/shared-core';
+
+/**
+ * Timeline view-model for the unified chat surface.
+ *
+ * The store keeps a {@link GraphNode}[] (already filtered by branch). Rather
+ * than letting each block component re-discover what a node means, the chat
+ * shell consumes a typed, ordered list of {@link ChatTimelineItem}. Each item
+ * carries the minimal data a block needs and a `node` reference for advanced
+ * actions (focus in studio, copy id, etc.).
+ *
+ * Important guarantees:
+ * - Items are sorted by `createdAt` ascending; ties broken by node id.
+ * - Items keep `kind` discriminator stable so React rendering stays cheap.
+ * - We never include nodes whose payload is unusable (empty text, missing
+ *   path, etc.) so the chat doesn't show ghost rows.
+ */
+
+export type ChatActor =
+  | { kind: 'human'; userId: string }
+  | { kind: 'agent'; agentType: string; agentId: string }
+  | { kind: 'system'; reason: string };
+
+export type ChatModelRef = {
+  providerId: string;
+  modelId: string;
+};
+
+export type ChatTimelineHumanMessage = {
+  kind: 'human_message';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  text: string;
+  format: 'markdown' | 'text';
+  node: GraphNode;
+};
+
+export type ChatTimelineAgentMessage = {
+  kind: 'agent_message';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  text: string;
+  format: 'markdown' | 'text';
+  agentType?: string;
+  model?: ChatModelRef;
+  node: GraphNode;
+};
+
+export type ChatTimelineSystemMessage = {
+  kind: 'system_message';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  text: string;
+  level: 'info' | 'warn' | 'error';
+  node: GraphNode;
+};
+
+export type ChatTimelineAgentSpawn = {
+  kind: 'agent_spawn';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  agentType: string;
+  model?: ChatModelRef;
+  workingDirectory?: string;
+  triggerNodeId?: string;
+  node: GraphNode;
+};
+
+export type ChatTimelineAgentStep = {
+  kind: 'agent_step';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  agentType?: string;
+  model?: ChatModelRef;
+  label?: string;
+  role?: string;
+  brief?: string;
+  node: GraphNode;
+};
+
+export type ChatTimelineAgentOutput = {
+  kind: 'agent_output';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  text: string;
+  stream: 'stdout' | 'stderr' | 'mixed';
+  isStreaming: boolean;
+  agentRunId?: string;
+  node: GraphNode;
+};
+
+export type ChatTimelineFile = {
+  kind: 'workspace_file';
+  id: string;
+  createdAt: string;
+  actor: ChatActor;
+  title: string;
+  path: string;
+  resolvedPath?: string;
+  role: 'input' | 'output' | 'intermediate';
+  origin: 'user_upload' | 'agent_output' | 'workspace_existing' | 'derived';
+  status: 'declared' | 'available' | 'missing' | 'deleted';
+  change?: 'added' | 'modified' | 'deleted';
+  summary?: string;
+  excerpt?: string;
+  mimeType?: string;
+  node: GraphNode;
+};
+
+export type ChatTimelineCopilotMessage = {
+  kind: 'copilot_message';
+  id: string;
+  createdAt: string;
+  role: WorkflowCopilotMessageRole;
+  status: WorkflowCopilotMessageStatus;
+  text: string;
+  analysis?: string;
+  summary: readonly string[];
+  warnings: readonly string[];
+  attachments: readonly WorkflowCopilotAttachment[];
+  apply?: WorkflowCopilotApplySummary;
+  /** Number of architectural ops the agent proposes; > 0 enables the Apply CTA. */
+  opCount: number;
+  rawOutput?: string;
+  /**
+   * Live reasoning stream replayed by the Copilot panel as a collapsible
+   * "Thinking…" section. Stays undefined when the agent doesn't surface a
+   * separate chain-of-thought channel.
+   */
+  thinkingOutput?: string;
+  error?: string;
+  agentType?: string;
+  model?: ChatModelRef;
+  scope?: WorkflowCopilotScope;
+  message: WorkflowCopilotMessage;
+};
+
+export type ChatTimelineCopilotCheckpoint = {
+  kind: 'copilot_checkpoint';
+  id: string;
+  createdAt: string;
+  /** The user message id this checkpoint was created for (used for placement). */
+  forUserMessageId?: string;
+  summary: readonly string[];
+  restoredAt?: string;
+  checkpoint: WorkflowCopilotCheckpoint;
+};
+
+export type ChatTimelineItem =
+  | ChatTimelineHumanMessage
+  | ChatTimelineAgentMessage
+  | ChatTimelineSystemMessage
+  | ChatTimelineAgentSpawn
+  | ChatTimelineAgentStep
+  | ChatTimelineAgentOutput
+  | ChatTimelineFile
+  | ChatTimelineCopilotMessage
+  | ChatTimelineCopilotCheckpoint;
+
+const CHAT_NODE_TYPES: ReadonlySet<GraphNode['type']> = new Set([
+  'human_message',
+  'agent_message',
+  'system_message',
+  'agent_spawn',
+  'agent_step',
+  'agent_output',
+  'workspace_file',
+]);
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function readActor(creator: GraphNode['creator']): ChatActor {
+  if (creator.type === 'human') {
+    return { kind: 'human', userId: creator.userId };
+  }
+  if (creator.type === 'agent') {
+    return { kind: 'agent', agentType: creator.agentType, agentId: creator.agentId };
+  }
+  return { kind: 'system', reason: creator.reason };
+}
+
+function readModelRef(value: unknown): ChatModelRef | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const provider = readString((value as { providerID?: unknown }).providerID);
+  const modelId = readString((value as { modelID?: unknown }).modelID);
+  if (!provider || !modelId) return undefined;
+  return { providerId: provider, modelId };
+}
+
+function readLevel(value: unknown): 'info' | 'warn' | 'error' {
+  if (value === 'warn' || value === 'warning') return 'warn';
+  if (value === 'error' || value === 'fatal') return 'error';
+  return 'info';
+}
+
+function readStream(value: unknown): 'stdout' | 'stderr' | 'mixed' {
+  if (value === 'stderr') return 'stderr';
+  if (value === 'mixed') return 'mixed';
+  return 'stdout';
+}
+
+function buildHumanMessage(node: GraphNode): ChatTimelineHumanMessage | null {
+  const text = readString((node.content as { text?: unknown }).text);
+  if (!text) return null;
+  const fmt = (node.content as { format?: unknown }).format;
+  return {
+    kind: 'human_message',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    text,
+    format: fmt === 'text' ? 'text' : 'markdown',
+    node,
+  };
+}
+
+function buildAgentMessage(node: GraphNode): ChatTimelineAgentMessage | null {
+  const text = readString((node.content as { text?: unknown }).text);
+  if (!text) return null;
+  const fmt = (node.content as { format?: unknown }).format;
+  const model = readModelRef((node.content as { model?: unknown }).model);
+  const agentType =
+    readString((node.content as { agentType?: unknown }).agentType) ??
+    (node.creator.type === 'agent' ? node.creator.agentType : undefined);
+  return {
+    kind: 'agent_message',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    text,
+    format: fmt === 'text' ? 'text' : 'markdown',
+    ...(agentType ? { agentType } : {}),
+    ...(model ? { model } : {}),
+    node,
+  };
+}
+
+function buildSystemMessage(node: GraphNode): ChatTimelineSystemMessage | null {
+  const text = readString((node.content as { text?: unknown }).text);
+  if (!text) return null;
+  return {
+    kind: 'system_message',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    text,
+    level: readLevel((node.content as { level?: unknown }).level),
+    node,
+  };
+}
+
+function buildAgentSpawn(node: GraphNode): ChatTimelineAgentSpawn {
+  const content = node.content as {
+    agentType?: unknown;
+    model?: unknown;
+    config?: { workingDirectory?: unknown; triggerNodeId?: unknown };
+  };
+  const agentType = readString(content.agentType) ?? 'unknown';
+  return {
+    kind: 'agent_spawn',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    agentType,
+    ...(readModelRef(content.model) ? { model: readModelRef(content.model)! } : {}),
+    ...(readString(content.config?.workingDirectory)
+      ? { workingDirectory: readString(content.config?.workingDirectory)! }
+      : {}),
+    ...(readString(content.config?.triggerNodeId)
+      ? { triggerNodeId: readString(content.config?.triggerNodeId)! }
+      : {}),
+    node,
+  };
+}
+
+function buildAgentStep(node: GraphNode): ChatTimelineAgentStep {
+  const content = node.content as {
+    agentType?: unknown;
+    model?: unknown;
+    label?: unknown;
+    role?: unknown;
+  };
+  const meta = node.metadata as { brief?: unknown; role?: unknown };
+  return {
+    kind: 'agent_step',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    ...(readString(content.agentType) ? { agentType: readString(content.agentType)! } : {}),
+    ...(readModelRef(content.model) ? { model: readModelRef(content.model)! } : {}),
+    ...(readString(content.label) ? { label: readString(content.label)! } : {}),
+    ...(readString(content.role) ?? readString(meta?.role)
+      ? { role: (readString(content.role) ?? readString(meta?.role))! }
+      : {}),
+    ...(readString(meta?.brief) ? { brief: readString(meta?.brief)! } : {}),
+    node,
+  };
+}
+
+function buildAgentOutput(node: GraphNode): ChatTimelineAgentOutput | null {
+  const content = node.content as {
+    output?: unknown;
+    outputType?: unknown;
+    isStreaming?: unknown;
+  };
+  const text = readString(content.output);
+  if (!text) return null;
+  const meta = node.metadata as { agentRunId?: unknown };
+  return {
+    kind: 'agent_output',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    text,
+    stream: readStream(content.outputType),
+    isStreaming: content.isStreaming === true,
+    ...(readString(meta?.agentRunId) ? { agentRunId: readString(meta?.agentRunId)! } : {}),
+    node,
+  };
+}
+
+function buildWorkspaceFile(node: GraphNode): ChatTimelineFile | null {
+  const artifact = readWorkflowArtifactContent(node.content);
+  if (!artifact) return null;
+  const path = artifact.relativePath;
+  if (!path) return null;
+  return {
+    kind: 'workspace_file',
+    id: node.id,
+    createdAt: node.createdAt,
+    actor: readActor(node.creator),
+    title: artifact.title?.trim() || path,
+    path,
+    ...(artifact.resolvedRelativePath?.trim()
+      ? { resolvedPath: artifact.resolvedRelativePath.trim() }
+      : {}),
+    role: artifact.role,
+    origin: artifact.origin,
+    status: artifact.status ?? 'declared',
+    ...(artifact.change ? { change: artifact.change } : {}),
+    ...(artifact.summary?.trim() ? { summary: artifact.summary.trim() } : {}),
+    ...(artifact.excerpt?.trim() ? { excerpt: artifact.excerpt.trim() } : {}),
+    ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+    node,
+  };
+}
+
+function buildItem(node: GraphNode): ChatTimelineItem | null {
+  switch (node.type) {
+    case 'human_message':
+      return buildHumanMessage(node);
+    case 'agent_message':
+      return buildAgentMessage(node);
+    case 'system_message':
+      return buildSystemMessage(node);
+    case 'agent_spawn':
+      return buildAgentSpawn(node);
+    case 'agent_step':
+      return buildAgentStep(node);
+    case 'agent_output':
+      return buildAgentOutput(node);
+    case 'workspace_file':
+      return buildWorkspaceFile(node);
+    default:
+      return null;
+  }
+}
+
+function compareItems(a: ChatTimelineItem, b: ChatTimelineItem): number {
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt < b.createdAt ? -1 : 1;
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * Build the chat timeline from the (already branch-filtered) graph nodes.
+ * Pure & memoizable — same input produces the same array reference shape.
+ */
+export function selectChatTimeline(nodes: readonly GraphNode[]): ChatTimelineItem[] {
+  const out: ChatTimelineItem[] = [];
+  for (const node of nodes) {
+    if (!CHAT_NODE_TYPES.has(node.type)) continue;
+    const item = buildItem(node);
+    if (item) out.push(item);
+  }
+  out.sort(compareItems);
+  return out;
+}
+
+/**
+ * Subset of timeline filtered to "speakable" rows (everything except agent
+ * outputs that should normally be folded under their parent step).
+ */
+export function selectChatConversation(nodes: readonly GraphNode[]): ChatTimelineItem[] {
+  return selectChatTimeline(nodes).filter((item) => item.kind !== 'agent_output');
+}
+
+function buildCopilotMessageItem(message: WorkflowCopilotMessage): ChatTimelineCopilotMessage {
+  const text = message.content ?? '';
+  const summary = Array.isArray(message.summary) ? message.summary : [];
+  const warnings = Array.isArray(message.warnings) ? message.warnings : [];
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const ops = Array.isArray(message.ops) ? message.ops.length : 0;
+  const model = readModelRef(message.model);
+  const item: ChatTimelineCopilotMessage = {
+    kind: 'copilot_message',
+    id: `copilot:${message.id}`,
+    createdAt: message.createdAt,
+    role: message.role,
+    status: message.status,
+    text,
+    summary,
+    warnings,
+    attachments,
+    opCount: ops,
+    message,
+  };
+  if (message.analysis && message.analysis.trim().length > 0) item.analysis = message.analysis;
+  if (message.apply) item.apply = message.apply;
+  if (message.rawOutput && message.rawOutput.trim().length > 0) item.rawOutput = message.rawOutput;
+  if (message.thinkingOutput && message.thinkingOutput.trim().length > 0)
+    item.thinkingOutput = message.thinkingOutput;
+  if (message.error && message.error.trim().length > 0) item.error = message.error;
+  if (message.agentType) item.agentType = message.agentType;
+  if (model) item.model = model;
+  if (message.scope) item.scope = message.scope;
+  return item;
+}
+
+function buildCopilotCheckpointItem(
+  checkpoint: WorkflowCopilotCheckpoint,
+  forUserMessageId: string | undefined,
+): ChatTimelineCopilotCheckpoint {
+  const item: ChatTimelineCopilotCheckpoint = {
+    kind: 'copilot_checkpoint',
+    id: `copilot:checkpoint:${checkpoint.id}`,
+    createdAt: checkpoint.createdAt,
+    summary: Array.isArray(checkpoint.summary) ? checkpoint.summary : [],
+    checkpoint,
+  };
+  if (forUserMessageId) item.forUserMessageId = forUserMessageId;
+  if (checkpoint.restoredAt) item.restoredAt = checkpoint.restoredAt;
+  return item;
+}
+
+/**
+ * Build a unified chat timeline that merges {@link GraphNode}-derived items
+ * with Copilot messages and checkpoints. Copilot messages are inserted at
+ * their `createdAt` so they interleave naturally with `human_message` and
+ * `agent_message` graph nodes; checkpoints are placed right after the user
+ * message they were created for (or at their own `createdAt` if no parent
+ * message can be matched).
+ *
+ * The selector is pure: same input → same shape, safe to memoize.
+ */
+export function selectUnifiedChatTimeline(input: {
+  nodes: readonly GraphNode[];
+  copilotMessages?: readonly WorkflowCopilotMessage[];
+  copilotCheckpoints?: readonly WorkflowCopilotCheckpoint[];
+}): ChatTimelineItem[] {
+  const items = selectChatTimeline(input.nodes);
+  const messages = input.copilotMessages ?? [];
+  for (const message of messages) {
+    items.push(buildCopilotMessageItem(message));
+  }
+  const checkpoints = input.copilotCheckpoints ?? [];
+  // Map checkpoint -> the user message right before its assistant message so
+  // we can render them under the user's prompt (matches WorkflowCopilotPanel).
+  const messagesByThread = new Map<string, WorkflowCopilotMessage[]>();
+  for (const message of messages) {
+    const arr = messagesByThread.get(message.threadId) ?? [];
+    arr.push(message);
+    messagesByThread.set(message.threadId, arr);
+  }
+  for (const arr of messagesByThread.values()) {
+    arr.sort((a, b) =>
+      a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1,
+    );
+  }
+  for (const checkpoint of checkpoints) {
+    const arr = messagesByThread.get(checkpoint.threadId) ?? [];
+    const assistantIdx = arr.findIndex((m) => m.id === checkpoint.messageId);
+    let userMessageId: string | undefined;
+    if (assistantIdx > 0) {
+      for (let i = assistantIdx - 1; i >= 0; i -= 1) {
+        if (arr[i]!.role === 'user') {
+          userMessageId = arr[i]!.id;
+          break;
+        }
+      }
+    }
+    items.push(buildCopilotCheckpointItem(checkpoint, userMessageId));
+  }
+  items.sort(compareItems);
+  return items;
+}

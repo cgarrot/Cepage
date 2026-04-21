@@ -1,0 +1,118 @@
+# cepage — local production stack (control plane only).
+#
+# This compose starts Postgres + Nest API + Next web. Everything is on the
+# `cepage` Docker network; only web/api/postgres are published on 127.0.0.1.
+#
+# `agent_run` and `runtime_*` jobs (spawn OpenCode / cursor-agent / other CLI)
+# no longer run in a container: they are consumed by the native daemon in
+# `apps/daemon`, which runs on the host and polls the API on localhost.
+#
+# Typical workflow:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#   cepage-daemon start                # on the host
+#
+# For a fresh DB: `docker compose ... down -v`
+
+name: cepage-prod
+
+x-node-base: &node-base
+  restart: unless-stopped
+  init: false # tini is already in the image
+  extra_hosts:
+    # macOS Docker Desktop resolves this already; add explicitly on Linux.
+    - "host.docker.internal:host-gateway"
+  networks:
+    - cepage
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cepage-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cepage}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cepage_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cepage}
+    ports:
+      - "127.0.0.1:31945:5432"
+    volumes:
+      - cepage_prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cepage} -d ${POSTGRES_DB:-cepage}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cepage
+
+  api:
+    <<: *node-base
+    container_name: cepage-prod-api
+    image: cepage-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Every variable defined in .env.prod is passed into the container
+    # automatically; no change to this file required. The keys under
+    # `environment:` are only those computed by compose itself (internal URLs,
+    # technical defaults); everything else stays user-config in .env.prod.
+    env_file:
+      - .env.prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cepage}:${POSTGRES_PASSWORD:-cepage_password}@postgres:5432/${POSTGRES_DB:-cepage}?schema=public
+      API_PORT: 3001
+      EXECUTION_WORKER_MODE: api
+      RUN_PRISMA_MIGRATE: "1"
+    ports:
+      - "127.0.0.1:31947:3001"
+    # The native daemon writes agent files on the host under
+    # ${CEPAGE_DEFAULT_WORKSPACE_ROOT}. The API (in a container) must be able
+    # to read them back for: (1) the "Workspace files" panel (preview /
+    # meta / download) and (2) RunArtifactsService.finalizeRun which scans the
+    # workspace and moves workspace_file nodes from declared -> available.
+    # Bind-mount the root at the SAME absolute path in the container because
+    # Session.workspaceParentDirectory is a raw host path and the API does
+    # path.resolve(process.cwd(), parent) -> absolute wins.
+    volumes:
+      - ${CEPAGE_DEFAULT_WORKSPACE_ROOT:-/tmp/cepage_workspaces}:${CEPAGE_DEFAULT_WORKSPACE_ROOT:-/tmp/cepage_workspaces}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  web:
+    <<: *node-base
+    container_name: cepage-prod-web
+    image: cepage-web:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      args:
+        # NEXT_PUBLIC_* are fixed at build time and read BY THE BROWSER.
+        # They must target the host port, not the compose service name.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:31947}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:31947}
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "127.0.0.1:31961:3000"
+
+volumes:
+  cepage_prod_pgdata:
+
+networks:
+  cepage:
+    driver: bridge

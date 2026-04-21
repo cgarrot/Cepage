@@ -1,0 +1,6 @@
+# Private skill catalogs — never commit personal content
+private/
+local/
+*.local.json
+.DS_Store
+*.tmp

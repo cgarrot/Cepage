@@ -1,0 +1,463 @@
+{
+  "schemaVersion": "1",
+  "generatedAt": "2026-04-19T00:00:00.000Z",
+  "skills": [
+    {
+      "id": "documentation-pack-clean-return",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Documentation Pack With Clean Return",
+      "summary": "Build a reusable documentation or research pack with stable published outputs and final verification.",
+      "promptFile": "documentation-pack-clean-return.md",
+      "tags": ["docs", "research", "pack", "publish"],
+      "routing": {
+        "keywords": ["documentation", "docs", "research pack", "context pack", "knowledge pack"],
+        "intents": ["documentation_pack", "research_pack"]
+      },
+      "capabilities": ["documentation synthesis", "research-first workflow", "stable publishing"],
+      "requiredInputs": ["topic or source material", "target documentation scope"],
+      "producedOutputs": ["docs/index.md", "outputs/verify.txt"],
+      "compositionHints": [
+        "Start with research, then publish stable docs and a final verification marker.",
+        "Use modular chunks when the documentation pack spans multiple subtopics."
+      ],
+      "simpleExamples": ["Create a reusable knowledge pack from my notes and official docs."],
+      "defaultModules": [
+        {
+          "id": "research",
+          "title": "Research the topic",
+          "role": "research",
+          "summary": "Collect the most useful knowledge and turn it into reusable notes.",
+          "requiredInputs": ["topic or source material"],
+          "producedOutputs": ["outputs/research-notes.md"],
+          "execution": "single"
+        },
+        {
+          "id": "publish",
+          "title": "Publish the documentation pack",
+          "role": "generation",
+          "summary": "Turn the research into stable final documentation files.",
+          "requiredInputs": ["outputs/research-notes.md"],
+          "producedOutputs": ["docs/index.md", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ],
+      "expectedWorkflow": {
+        "orchestration": "managed_flow",
+        "phases": ["research", "scaffold", "derive_input", "loop", "cleanup_publish", "runtime_verify"],
+        "intermediateOutputs": ["per_run chunk files", "research notes", "chunk manifest"],
+        "publishedOutputs": ["stable docs files per slug or requested filename", "README or index", "verify.txt"]
+      }
+    },
+    {
+      "id": "three-js-vanilla-clean-return",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Three.js Vanilla Documentation Pack (Validated)",
+      "summary": "Generate a validated Three.js vanilla context pack with clean published docs and a verify marker.",
+      "promptFile": "three-js-vanilla-clean-return.md",
+      "tags": ["docs", "threejs", "framework", "validated"],
+      "routing": {
+        "keywords": ["three.js", "threejs", "vanilla", "framework docs", "game dev docs"],
+        "intents": ["framework_context_pack"]
+      },
+      "validated": true,
+      "capabilities": ["framework documentation", "topic chunking", "stable publish and verify"],
+      "requiredInputs": ["framework topic", "scope constraints"],
+      "producedOutputs": ["docs/context/frameworks/README.md", "outputs/verify.txt"],
+      "simpleExamples": ["Build a clean context pack about Three.js vanilla for game development."],
+      "defaultModules": [
+        {
+          "id": "research",
+          "title": "Research Three.js",
+          "role": "research",
+          "summary": "Collect the most useful Three.js vanilla references for the requested scope.",
+          "requiredInputs": ["framework topic"],
+          "producedOutputs": ["outputs/research-notes.md"],
+          "execution": "single"
+        },
+        {
+          "id": "publish",
+          "title": "Publish framework docs",
+          "role": "generation",
+          "summary": "Write the stable docs pack and verification marker.",
+          "requiredInputs": ["outputs/research-notes.md"],
+          "producedOutputs": ["docs/context/frameworks/README.md", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "app-builder-clean-return",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "App Builder With Clean Return",
+      "summary": "Turn a product brief into a runnable app or feature with a clean final workspace handoff.",
+      "promptFile": "app-builder-clean-return.md",
+      "tags": ["app", "feature", "implementation", "runtime"],
+      "routing": {
+        "keywords": ["build an app", "feature", "prototype", "mvp", "make a web app"],
+        "intents": ["app_builder", "feature_build"]
+      },
+      "capabilities": ["product implementation", "feature delivery", "runnable workspace handoff"],
+      "requiredInputs": ["product brief", "scope", "constraints"],
+      "producedOutputs": ["outputs/handoff-notes.md"],
+      "simpleExamples": ["I want an app built from a short product brief."],
+      "defaultModules": [
+        {
+          "id": "plan",
+          "title": "Plan the app slice",
+          "role": "planning",
+          "summary": "Turn the brief into a focused implementation slice.",
+          "requiredInputs": ["product brief"],
+          "producedOutputs": ["outputs/implementation-plan.md"],
+          "execution": "single"
+        },
+        {
+          "id": "build",
+          "title": "Implement the app",
+          "role": "generation",
+          "summary": "Build the requested app or feature in the workspace.",
+          "requiredInputs": ["outputs/implementation-plan.md"],
+          "producedOutputs": ["outputs/handoff-notes.md"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "game-dev-managed-flow-clean-return",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Game Dev Managed Flow With Clean Return",
+      "summary": "Drive game-development work from source docs through roadmap, slices, implementation loops, and publish/verify.",
+      "promptFile": "game-dev-managed-flow-clean-return.md",
+      "tags": ["game", "interactive", "roadmap", "slice_loop"],
+      "routing": {
+        "keywords": ["game", "interactive app", "level", "prototype game", "gameplay loop", "vampire survivor"],
+        "intents": ["game_dev_flow"]
+      },
+      "capabilities": ["game analysis", "gameplay research", "slice planning", "iterative implementation"],
+      "requiredInputs": ["game analyses", "video analyses", "source docs", "design goals"],
+      "producedOutputs": ["outputs/analysis.md", "outputs/roadmap.md", "outputs/final-review.md"],
+      "simpleExamples": ["I want a dev cycle for a Vampire Survivors style game from my gameplay analysis and web research."],
+      "defaultModules": [
+        {
+          "id": "analyze",
+          "title": "Analyze the existing game data",
+          "role": "analysis",
+          "summary": "Extract the strongest gameplay, progression, and retention insights from the provided analyses.",
+          "requiredInputs": ["game analyses", "video analyses"],
+          "producedOutputs": ["outputs/analysis.md"],
+          "execution": "single"
+        },
+        {
+          "id": "research",
+          "title": "Deepen with game research",
+          "role": "research",
+          "summary": "Research unresolved design questions and comparable systems from the web.",
+          "requiredInputs": ["outputs/analysis.md"],
+          "producedOutputs": ["outputs/research.md"],
+          "execution": "single"
+        },
+        {
+          "id": "roadmap",
+          "title": "Create the roadmap and slices",
+          "role": "synthesis",
+          "summary": "Turn the analysis and research into a clear roadmap and implementation slices.",
+          "requiredInputs": ["outputs/analysis.md", "outputs/research.md"],
+          "producedOutputs": ["outputs/roadmap.md", "outputs/slices.json"],
+          "execution": "single"
+        },
+        {
+          "id": "implement",
+          "title": "Implement the strongest slice",
+          "role": "generation",
+          "summary": "Build or update the most valuable game slice in the workspace.",
+          "requiredInputs": ["outputs/roadmap.md", "outputs/slices.json"],
+          "producedOutputs": ["outputs/final-review.md"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "analysis-pipeline-modular-architect",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Analysis Pipeline Modular Architect",
+      "summary": "Turn existing analyses into a modular multi-agent workflow that deepens, synthesizes, and generates new data.",
+      "promptFile": "analysis-pipeline-modular-architect.md",
+      "tags": ["analysis", "research", "modular", "multi_agent"],
+      "routing": {
+        "keywords": ["analysis data", "existing analyses", "deepen analysis", "create more data", "pipeline from analyses"],
+        "intents": ["analysis_pipeline", "modular_pipeline"]
+      },
+      "capabilities": ["analysis deepening", "web research", "modular orchestration", "new data generation"],
+      "requiredInputs": ["existing analysis data", "research goals", "optional tooling docs"],
+      "producedOutputs": ["outputs/final-report.md", "outputs/final-manifest.json"],
+      "simpleExamples": [
+        "I already have analysis data and I want a workflow that deepens it with web research and creates new structured outputs.",
+        "Create a multi-agent pipeline from my existing analyses."
+      ],
+      "defaultModules": [
+        {
+          "id": "analysis",
+          "title": "Normalize the source analyses",
+          "role": "analysis",
+          "summary": "Read the existing analyses and turn them into a clean working baseline.",
+          "requiredInputs": ["existing analysis data"],
+          "producedOutputs": ["outputs/analysis-baseline.md"],
+          "execution": "single"
+        },
+        {
+          "id": "research",
+          "title": "Deepen the weak areas",
+          "role": "research",
+          "summary": "Use web research to fill the gaps and deepen the uncertain areas.",
+          "requiredInputs": ["outputs/analysis-baseline.md", "research goals"],
+          "producedOutputs": ["outputs/research-findings.md"],
+          "execution": "single"
+        },
+        {
+          "id": "synthesis",
+          "title": "Synthesize the signal",
+          "role": "synthesis",
+          "summary": "Merge the analysis baseline and the research findings into a stronger synthesis.",
+          "requiredInputs": ["outputs/analysis-baseline.md", "outputs/research-findings.md"],
+          "producedOutputs": ["outputs/synthesis.md"],
+          "execution": "single"
+        },
+        {
+          "id": "generation",
+          "title": "Generate the new dataset",
+          "role": "generation",
+          "summary": "Create the new data products, manifests, or briefs requested by the user.",
+          "requiredInputs": ["outputs/synthesis.md"],
+          "producedOutputs": ["outputs/final-report.md", "outputs/final-manifest.json"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "workflow-generator-publish",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Workflow Generator And Publisher",
+      "summary": "Generate, lint, publish, and verify a reusable workflow artifact.",
+      "promptFile": "workflow-generator-publish.md",
+      "tags": ["workflow", "generator", "publish"],
+      "routing": {
+        "keywords": ["generate workflow", "workflow template", "publish workflow"],
+        "intents": ["workflow_generation"]
+      },
+      "capabilities": ["workflow authoring", "workflow linting", "publish and verify"],
+      "requiredInputs": ["workflow goal", "artifact constraints"],
+      "producedOutputs": ["workflow-transfer.json"],
+      "simpleExamples": ["Generate and publish a reusable workflow template from my requirements."],
+      "defaultModules": [
+        {
+          "id": "assemble",
+          "title": "Assemble the workflow",
+          "role": "planning",
+          "summary": "Produce the draft workflow artifact from the requested goal.",
+          "requiredInputs": ["workflow goal"],
+          "producedOutputs": ["outputs/workflow-draft.json"],
+          "execution": "single"
+        },
+        {
+          "id": "publish",
+          "title": "Publish the workflow",
+          "role": "generation",
+          "summary": "Lint, publish, and verify the final workflow artifact.",
+          "requiredInputs": ["outputs/workflow-draft.json"],
+          "producedOutputs": ["workflow-transfer.json"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "workflow-api-operator",
+      "version": "1.0.0",
+      "kind": "operator_playbook",
+      "title": "Workflow API Operator",
+      "summary": "Operator runbook for creating sessions, configuring workspaces, generating workflows, running them, and validating published outputs via the API.",
+      "promptFile": "workflow-copilot-api-skill.md",
+      "tags": ["operator", "api", "runbook"],
+      "routing": {
+        "keywords": ["api", "operator", "runbook", "workflow api"],
+        "intents": ["workflow_api_operation"]
+      }
+    },
+    {
+      "id": "hello-world-workflow",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Hello World Workflow",
+      "summary": "Create a minimal single-node workflow that proves the end-to-end flow with one stable output file.",
+      "promptFile": "hello-world-workflow.md",
+      "tags": ["demo", "starter", "minimal", "hello_world"],
+      "routing": {
+        "keywords": ["hello world", "starter workflow", "minimal workflow", "first workflow"],
+        "intents": ["hello_world_workflow"]
+      },
+      "capabilities": ["minimal demo", "single-node flow", "basic verification"],
+      "requiredInputs": ["goal sentence"],
+      "producedOutputs": ["outputs/hello-world.txt", "outputs/verify.txt"],
+      "simpleExamples": ["Create a hello world workflow I can inspect and run."],
+      "defaultModules": [
+        {
+          "id": "generate",
+          "title": "Write the greeting",
+          "role": "generation",
+          "summary": "Create one simple artifact that proves the workflow executed.",
+          "requiredInputs": ["goal sentence"],
+          "producedOutputs": ["outputs/hello-world.txt", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "rest-api-pipeline",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "REST API Pipeline",
+      "summary": "Coordinate API requests, transform responses, and publish a stable result bundle with explicit validation.",
+      "promptFile": "rest-api-pipeline.md",
+      "tags": ["api", "integration", "http", "pipeline"],
+      "routing": {
+        "keywords": ["rest api", "api pipeline", "http integration", "fetch transform publish"],
+        "intents": ["rest_api_pipeline"]
+      },
+      "capabilities": ["API orchestration", "response normalization", "published result packs"],
+      "requiredInputs": ["API brief", "input payloads", "output contract"],
+      "producedOutputs": ["outputs/result.json", "outputs/verify.txt"],
+      "defaultModules": [
+        {
+          "id": "fetch",
+          "title": "Call the APIs",
+          "role": "integration",
+          "summary": "Run the required HTTP calls and capture raw responses.",
+          "requiredInputs": ["API brief", "input payloads"],
+          "producedOutputs": ["outputs/raw-responses.json"],
+          "execution": "single"
+        },
+        {
+          "id": "transform",
+          "title": "Transform the data",
+          "role": "synthesis",
+          "summary": "Normalize the responses into the requested result contract.",
+          "requiredInputs": ["outputs/raw-responses.json", "output contract"],
+          "producedOutputs": ["outputs/result.json", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "scheduled-report-generator",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Scheduled Report Generator",
+      "summary": "Collect recurring inputs, generate a report, and publish a stable summary package on a repeated cadence.",
+      "promptFile": "scheduled-report-generator.md",
+      "tags": ["report", "scheduled", "recurring", "summary"],
+      "routing": {
+        "keywords": ["scheduled report", "weekly report", "daily summary", "recurring report"],
+        "intents": ["scheduled_report_generation"]
+      },
+      "capabilities": ["recurring reporting", "summaries", "publication-ready exports"],
+      "requiredInputs": ["report scope", "data sources", "schedule expectations"],
+      "producedOutputs": ["outputs/report.md", "outputs/report.json", "outputs/verify.txt"],
+      "defaultModules": [
+        {
+          "id": "collect",
+          "title": "Collect the source data",
+          "role": "research",
+          "summary": "Gather the inputs needed for the current reporting window.",
+          "requiredInputs": ["data sources", "schedule expectations"],
+          "producedOutputs": ["outputs/report-source.json"],
+          "execution": "single"
+        },
+        {
+          "id": "publish",
+          "title": "Publish the report",
+          "role": "generation",
+          "summary": "Create the final markdown and structured report outputs.",
+          "requiredInputs": ["outputs/report-source.json", "report scope"],
+          "producedOutputs": ["outputs/report.md", "outputs/report.json", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "file-organizer",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "File Organizer",
+      "summary": "Sort, classify, and publish a stable manifest for a messy directory of files.",
+      "promptFile": "file-organizer.md",
+      "tags": ["files", "organization", "classification", "manifest"],
+      "routing": {
+        "keywords": ["file organizer", "organize files", "classify files", "folder cleanup"],
+        "intents": ["file_organization"]
+      },
+      "capabilities": ["file classification", "stable manifests", "cleanup plans"],
+      "requiredInputs": ["input directory", "organization rules"],
+      "producedOutputs": ["outputs/file-plan.json", "outputs/file-summary.md", "outputs/verify.txt"],
+      "defaultModules": [
+        {
+          "id": "inventory",
+          "title": "Inventory the files",
+          "role": "analysis",
+          "summary": "List and classify the input files before any reorganization.",
+          "requiredInputs": ["input directory"],
+          "producedOutputs": ["outputs/file-index.json"],
+          "execution": "single"
+        },
+        {
+          "id": "publish",
+          "title": "Publish the organization plan",
+          "role": "generation",
+          "summary": "Produce the stable file plan, summary, and verification marker.",
+          "requiredInputs": ["outputs/file-index.json", "organization rules"],
+          "producedOutputs": ["outputs/file-plan.json", "outputs/file-summary.md", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    },
+    {
+      "id": "notification-dispatcher",
+      "version": "1.0.0",
+      "kind": "workflow_template",
+      "title": "Notification Dispatcher",
+      "summary": "Fan out one event or briefing across multiple channels while keeping a stable dispatch manifest and verification output.",
+      "promptFile": "notification-dispatcher.md",
+      "tags": ["notifications", "dispatch", "channels", "fanout"],
+      "routing": {
+        "keywords": ["notification dispatcher", "send notifications", "multi-channel notifications", "fan out alerts"],
+        "intents": ["notification_dispatch"]
+      },
+      "capabilities": ["channel fanout", "message adaptation", "delivery manifests"],
+      "requiredInputs": ["message brief", "target channels", "delivery rules"],
+      "producedOutputs": ["outputs/dispatch-plan.json", "outputs/dispatch-summary.md", "outputs/verify.txt"],
+      "defaultModules": [
+        {
+          "id": "prepare",
+          "title": "Prepare per-channel messages",
+          "role": "synthesis",
+          "summary": "Adapt the source brief for each channel and publish the final dispatch plan.",
+          "requiredInputs": ["message brief", "target channels", "delivery rules"],
+          "producedOutputs": ["outputs/dispatch-plan.json"],
+          "execution": "single"
+        },
+        {
+          "id": "verify",
+          "title": "Verify the dispatch package",
+          "role": "validation",
+          "summary": "Confirm the final plan is complete and publish a stable summary.",
+          "requiredInputs": ["outputs/dispatch-plan.json"],
+          "producedOutputs": ["outputs/dispatch-summary.md", "outputs/verify.txt"],
+          "execution": "single"
+        }
+      ]
+    }
+  ]
+}

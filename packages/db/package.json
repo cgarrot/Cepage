@@ -1,0 +1,25 @@
+{
+  "name": "@cepage/db",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "generate": "node ../../scripts/run-prisma.mjs generate",
+    "migrate:dev": "node ../../scripts/run-prisma.mjs migrate dev",
+    "db:push": "node ../../scripts/run-prisma.mjs db push",
+    "build": "prisma generate",
+    "lint": "node ../../scripts/run-prisma.mjs validate --schema prisma/schema.prisma",
+    "clean": "rm -rf node_modules/.cache",
+    "test": "echo 'no tests'",
+    "dev": "echo \"use pnpm db:migrate:dev\""
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "5.22.0"
+  }
+}

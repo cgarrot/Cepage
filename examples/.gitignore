@@ -1,0 +1,5 @@
+# Personal / private examples are ignored by default.
+# Public examples must be explicitly whitelisted below.
+*
+!.gitignore
+!README.md

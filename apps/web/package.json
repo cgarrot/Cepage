@@ -1,0 +1,31 @@
+{
+  "name": "@cepage/web",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "node ../../scripts/run-web-dev.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint src next.config.mjs next.config.ts --max-warnings=0",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "@cepage/client-api": "workspace:*",
+    "@cepage/state": "workspace:*",
+    "@cepage/app-ui": "workspace:*",
+    "@xyflow/react": "^12.0.0",
+    "next": "^15.5.15",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3"
+  }
+}

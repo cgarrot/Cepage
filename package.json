@@ -1,0 +1,41 @@
+{
+  "name": "cepage-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Cepage — graph-first multi-agent canvas",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "eslint scripts *.mjs --max-warnings=0 && turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "pnpm build",
+    "clean": "turbo run clean && rm -rf node_modules apps/*/node_modules packages/*/node_modules",
+    "web:dev": "pnpm --filter @cepage/web run dev",
+    "web:build": "pnpm --filter @cepage/web run build",
+    "api:dev": "pnpm --filter @cepage/api-app run dev",
+    "api:build": "pnpm --filter @cepage/api-app run build",
+    "daemon:dev": "pnpm --filter @cepage/daemon run dev",
+    "daemon:build": "pnpm --filter @cepage/daemon run build",
+    "daemon": "pnpm --filter @cepage/daemon exec cepage-daemon",
+    "workflow:test:real": "node scripts/workflow-real-tester.mjs",
+    "db:generate": "node scripts/run-prisma.mjs generate",
+    "db:migrate:dev": "node scripts/run-prisma.mjs migrate dev",
+    "db:push": "node scripts/run-prisma.mjs db push"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "dotenv": "^17.2.3",
+    "dotenv-expand": "^12.0.3",
+    "eslint": "^10.2.0",
+    "globals": "^17.4.0",
+    "turbo": "^2.0.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.58.1"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=8.0.0"
+  },
+  "license": "MIT"
+}

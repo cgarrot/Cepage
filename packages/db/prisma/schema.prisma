@@ -1,0 +1,573 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                       String   @id @default(uuid())
+  name                     String
+  status                   String   @default("active")
+  viewportX                Float    @default(0)
+  viewportY                Float    @default(0)
+  viewportZoom             Float    @default(1)
+  lastEventId              Int      @default(0)
+  workspaceParentDirectory String?
+  workspaceDirectoryName   String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  nodes      GraphNode[]
+  edges      GraphEdge[]
+  branches   Branch[]
+  events     GraphEvent[]
+  workflowExecutions WorkflowExecution[]
+  workflowControllerStates WorkflowControllerState[]
+  workflowManagedFlows WorkflowManagedFlow[]
+  agentRuns  AgentRun[]
+  activities ActivityEntry[]
+  executionJobs     ExecutionJob[]
+  executionLeases   ExecutionLease[]
+  approvalRequests  ApprovalRequest[]
+  budgetAccounts    BudgetAccount[]
+  worktreeAllocations WorktreeAllocation[]
+  scheduledTriggers ScheduledTrigger[]
+  watchSubscriptions WatchSubscription[]
+  evaluationReports EvaluationReport[]
+  snapshots  GraphSnapshot[]
+  workflowCopilotThreads     WorkflowCopilotThread[]
+  workflowCopilotCheckpoints WorkflowCopilotCheckpoint[]
+}
+
+model GraphNode {
+  id         String   @id
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type       String
+  content    Json
+  creator    Json
+  positionX  Float
+  positionY  Float
+  width      Float    @default(220)
+  height     Float    @default(120)
+  metadata   Json     @default("{}")
+  status     String   @default("active")
+  branchIds  String[] @default([])
+  createdAt  DateTime
+  updatedAt  DateTime
+
+  @@index([sessionId])
+}
+
+model GraphEdge {
+  id        String   @id
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  source    String
+  target    String
+  relation  String
+  direction String   @default("bidirectional")
+  strength  Float    @default(0.5)
+  creator   Json
+  metadata  Json     @default("{}")
+  createdAt DateTime
+
+  @@index([sessionId])
+}
+
+model Branch {
+  id                 String   @id
+  sessionId          String
+  session            Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name               String
+  color              String
+  headNodeId         String
+  nodeIds            Json
+  parentBranchId     String?
+  forkedFromNodeId   String?
+  status             String
+  mergedIntoBranchId String?
+  createdBy          Json
+  createdAt          DateTime
+
+  @@index([sessionId])
+}
+
+model GraphEvent {
+  id        Int      @id @default(autoincrement())
+  eventId   Int
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  kind      String
+  payload   Json
+  actor     Json
+  runId     String?
+  wakeReason String?
+  requestId String?
+  workerId  String?
+  worktreeId String?
+  timestamp DateTime @default(now())
+
+  @@unique([sessionId, eventId])
+  @@index([sessionId, eventId])
+  @@index([workerId])
+}
+
+model AgentRun {
+  id               String   @id
+  sessionId        String
+  session          Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  executionId      String?
+  execution        WorkflowExecution? @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  requestId        String?
+  agentType        String
+  role             String
+  status           String
+  wakeReason       String
+  runtime          Json
+  startedAt        DateTime
+  endedAt          DateTime?
+  updatedAt        DateTime @updatedAt
+  seedNodeIds      Json
+  rootNodeId       String?
+  triggerNodeId    String?
+  stepNodeId       String?
+  retryOfRunId     String?
+  parentAgentId    String?
+  parentRunId      String?
+  lastSeenEventId  Int?
+  modelProviderId  String?
+  modelId          String?
+  externalSessionId String?
+  providerMetadata Json?
+  outputText       String?
+  isStreaming      Boolean  @default(false)
+
+  @@index([sessionId])
+  @@index([executionId])
+  @@index([sessionId, requestId])
+}
+
+model WorkflowExecution {
+  id              String   @id @default(uuid())
+  sessionId       String
+  session         Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentExecutionId String?
+  parentExecution WorkflowExecution? @relation("WorkflowExecutionChildren", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  childExecutions WorkflowExecution[] @relation("WorkflowExecutionChildren")
+  triggerNodeId   String?
+  stepNodeId      String?
+  currentRunId    String?
+  latestRunId     String?
+  requestId       String?
+  agentType       String
+  role            String
+  status          String
+  wakeReason      String
+  runtime         Json
+  seedNodeIds     Json
+  modelProviderId String?
+  modelId         String?
+  startedAt       DateTime
+  endedAt         DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  attempts AgentRun[]
+  ownedControllerState WorkflowControllerState? @relation("WorkflowControllerExecution")
+  parentControllerStates WorkflowControllerState[] @relation("WorkflowControllerParentExecution")
+  currentChildControllerStates WorkflowControllerState[] @relation("WorkflowControllerChildExecution")
+
+  @@index([sessionId])
+  @@index([sessionId, triggerNodeId, stepNodeId])
+  @@index([parentExecutionId])
+}
+
+model WorkflowControllerState {
+  id                     String   @id @default(uuid())
+  sessionId              String
+  session                Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  controllerNodeId       String
+  parentExecutionId      String?
+  parentExecution        WorkflowExecution? @relation("WorkflowControllerParentExecution", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  executionId            String?  @unique
+  execution              WorkflowExecution? @relation("WorkflowControllerExecution", fields: [executionId], references: [id], onDelete: SetNull)
+  currentChildExecutionId String?
+  currentChildExecution  WorkflowExecution? @relation("WorkflowControllerChildExecution", fields: [currentChildExecutionId], references: [id], onDelete: SetNull)
+  mode                   String
+  sourceKind             String
+  status                 String
+  state                  Json
+  startedAt              DateTime @default(now())
+  endedAt                DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([sessionId, controllerNodeId])
+  @@index([sessionId, status])
+}
+
+model WorkflowManagedFlow {
+  id                String   @id @default(uuid())
+  sessionId         String
+  session           Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentFlowId      String?
+  parentFlow        WorkflowManagedFlow? @relation("WorkflowManagedFlowChildren", fields: [parentFlowId], references: [id], onDelete: SetNull)
+  childFlows        WorkflowManagedFlow[] @relation("WorkflowManagedFlowChildren")
+  entryNodeId       String
+  status            String
+  syncMode          String
+  revision          Int      @default(0)
+  currentPhaseId    String?
+  currentPhaseIndex Int?
+  cancelRequested   Boolean  @default(false)
+  wait              Json?
+  state             Json
+  startedAt         DateTime @default(now())
+  endedAt           DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([sessionId, entryNodeId])
+  @@index([sessionId, status])
+  @@index([parentFlowId])
+}
+
+model ActivityEntry {
+  id             String   @id @default(uuid())
+  sessionId      String
+  session        Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  timestamp      DateTime @default(now())
+  actorType      String
+  actorId        String
+  runId          String?
+  wakeReason     String?
+  requestId      String?
+  workerId       String?
+  worktreeId     String?
+  summary        String
+  summaryKey     String?
+  summaryParams  Json?
+  metadata       Json?
+  relatedNodeIds Json?
+
+  @@index([sessionId])
+  @@index([sessionId, workerId])
+}
+
+model ExecutionJob {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  sessionId      String?
+  session        Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ownerKind      String
+  ownerId        String
+  runId          String?
+  executionId    String?
+  requestId      String?
+  wakeReason     String?
+  workerId       String?
+  worker         WorkerNode? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  kind           String
+  status         String
+  priority       Int      @default(0)
+  attempts       Int      @default(0)
+  maxAttempts    Int      @default(8)
+  payload        Json
+  result         Json?
+  error          String?
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  availableAt    DateTime @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@index([sessionId, status])
+  @@index([ownerKind, ownerId])
+}
+
+model WorkerNode {
+  id         String   @id
+  kind       String
+  status     String
+  host       String?
+  pid        Int?
+  metadata   Json?
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  jobs       ExecutionJob[]
+  heartbeats WorkerHeartbeat[]
+  leases     ExecutionLease[]
+
+  @@index([status, lastSeenAt])
+}
+
+model WorkerHeartbeat {
+  id          String   @id @default(uuid())
+  workerId    String
+  worker      WorkerNode @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  activeJobId String?
+  load        Json?
+  recordedAt  DateTime @default(now())
+
+  @@index([workerId, recordedAt])
+}
+
+model ExecutionLease {
+  id          String   @id @default(uuid())
+  sessionId   String?
+  session     Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  resourceKind String
+  resourceKey String
+  scopeKey    String?
+  holderKind  String
+  holderId    String
+  workerId    String?
+  worker      WorkerNode? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  runId       String?
+  executionId String?
+  requestId   String?
+  status      String
+  leaseToken  String?
+  metadata    Json?
+  expiresAt   DateTime
+  releasedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, resourceKind, resourceKey])
+  @@index([status, expiresAt])
+}
+
+model ApprovalRequest {
+  id              String   @id @default(uuid())
+  sessionId       String?
+  session         Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  runId           String?
+  executionId     String?
+  requestId       String?
+  kind            String
+  status          String
+  title           String
+  detail          String?
+  risk            String
+  payload         Json
+  resolution      Json?
+  requestedByType String
+  requestedById   String
+  resolvedByType  String?
+  resolvedById    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  resolvedAt      DateTime?
+
+  @@index([sessionId, status])
+}
+
+model BudgetAccount {
+  id        String   @id @default(uuid())
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scopeKind String
+  scopeId   String
+  status    String
+  unit      String
+  limit     Int?
+  used      Int      @default(0)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId, scopeKind, scopeId])
+}
+
+model WorktreeAllocation {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  runId       String?
+  executionId String?
+  leaseId     String?
+  status      String
+  rootPath    String
+  branchName  String?
+  metadata    Json?
+  releasedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, status])
+}
+
+model ScheduledTrigger {
+  id         String   @id @default(uuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ownerNodeId String
+  label      String?
+  cron       String
+  status     String
+  payload    Json
+  nextRunAt  DateTime
+  lastRunAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sessionId, status, nextRunAt])
+  @@index([sessionId, ownerNodeId])
+}
+
+model WatchSubscription {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  ownerNodeId String?
+  kind        String
+  target      String
+  status      String
+  cursor      String?
+  payload     Json
+  lastEventAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, kind, status])
+  @@index([sessionId, ownerNodeId])
+}
+
+model EvaluationReport {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  runId       String?
+  executionId String?
+  flowId      String?
+  phaseId     String?
+  nodeId      String?
+  kind        String
+  outcome     String
+  summary     String
+  details     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, outcome])
+  @@index([sessionId, flowId])
+}
+
+model GraphSnapshot {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  lastEventId Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+// Generic recurring "create a session from a skill" trigger.
+// Driven by SessionFromSkillService — no skill-specific code lives here.
+model ScheduledSkillRun {
+  id            String   @id @default(uuid())
+  label         String?
+  skillId       String
+  cron          String
+  request       Json
+  status        String   @default("active")
+  nextRunAt     DateTime
+  lastRunAt     DateTime?
+  lastSessionId String?
+  lastError     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([skillId])
+}
+
+model WorkflowCopilotThread {
+  id                String   @id @default(uuid())
+  sessionId         String
+  session           Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  surface           String
+  ownerKey          String
+  ownerNodeId       String?
+  title             String?
+  agentType         String
+  modelProviderId   String?
+  modelId           String?
+  scope             Json
+  mode              String   @default("edit")
+  autoApply         Boolean  @default(true)
+  autoRun           Boolean  @default(true)
+  externalSessionId String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  messages    WorkflowCopilotMessage[]
+  checkpoints WorkflowCopilotCheckpoint[]
+
+  @@unique([sessionId, surface, ownerKey])
+  @@index([sessionId])
+}
+
+model WorkflowCopilotMessage {
+  id              String   @id @default(uuid())
+  threadId        String
+  thread          WorkflowCopilotThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role            String
+  status          String
+  content         String
+  analysis        String?
+  summary         Json?
+  warnings        Json?
+  ops             Json?
+  apply           Json?
+  executions      Json?
+  executionResults Json?
+  error           String?
+  scope           Json?
+  agentType       String?
+  modelProviderId String?
+  modelId         String?
+  rawOutput       String?
+  thinkingOutput  String?
+  attachments     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  checkpoints WorkflowCopilotCheckpoint[]
+
+  @@index([threadId, createdAt])
+}
+
+model WorkflowCopilotCheckpoint {
+  id         String   @id @default(uuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  threadId   String
+  thread     WorkflowCopilotThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  messageId  String
+  message    WorkflowCopilotMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  summary    Json?
+  flow       Json
+  restoredAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([threadId, createdAt])
+}

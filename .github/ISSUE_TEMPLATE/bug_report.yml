@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible problem in Cepage
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Please include enough detail for someone new to the project to reproduce the problem.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug and the observed behavior.
+      placeholder: A short summary of the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: List the exact steps, commands, and inputs.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      placeholder: Describe the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share the OS, Node.js version, pnpm version, and anything else relevant.
+      placeholder: macOS 15, Node 20.11, pnpm 9.0.0, PostgreSQL 16
+    validations:
+      required: true

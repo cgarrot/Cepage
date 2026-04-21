@@ -1,0 +1,25 @@
+# PostgreSQL for local development (same URL as .env.example).
+# Start with: docker compose up -d
+# Update migration history with: pnpm db:migrate:dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cepage-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cepage
+    ports:
+      - '31945:5432'
+    volumes:
+      - cepage_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d cepage']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cepage_pgdata:

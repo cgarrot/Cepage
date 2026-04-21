@@ -1,0 +1,48 @@
+{
+  "name": "@cepage/app-ui",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "test": "pnpm build && node --test dist/__tests__/timeline-helpers.test.js dist/__tests__/branch-helpers.test.js dist/__tests__/structured-node-editor.test.js dist/__tests__/input-api-doc.test.js"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@xyflow/react": "^12.0.0",
+    "@cepage/client-api": "workspace:*",
+    "@cepage/i18n": "workspace:*",
+    "@cepage/shared-core": "workspace:*",
+    "@cepage/state": "workspace:*",
+    "@cepage/ui-kit": "workspace:*",
+    "react-markdown": "^9",
+    "react-resizable-panels": "^2.1.7",
+    "rehype-highlight": "^7",
+    "remark-gfm": "^4"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3"
+  }
+}

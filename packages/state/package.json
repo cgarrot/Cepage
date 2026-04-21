@@ -1,0 +1,42 @@
+{
+  "name": "@cepage/state",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "test": "pnpm build && node --test dist/__tests__/graph-context.test.js dist/__tests__/workflow-copilot-state.test.js dist/__tests__/workflow-copilot-draft.test.js dist/__tests__/workspace-node-create.test.js dist/__tests__/workspace-flow.test.js dist/__tests__/workspace-run.test.js dist/__tests__/api-error.test.js dist/__tests__/live-runs.test.js dist/__tests__/live.test.js dist/__tests__/theme.test.js dist/__tests__/timeline.test.js dist/__tests__/chat-timeline.test.js dist/__tests__/workspace-files.test.js dist/__tests__/workspace-tabs.test.js"
+  },
+  "dependencies": {
+    "@cepage/i18n": "workspace:*",
+    "@xyflow/react": "^12.0.0",
+    "@cepage/client-api": "workspace:*",
+    "@cepage/shared-core": "workspace:*",
+    "socket.io-client": "^4.8.3",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

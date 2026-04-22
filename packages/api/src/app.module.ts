@@ -16,6 +16,12 @@ import { WorkflowCopilotModule } from './modules/workflow-copilot/workflow-copil
 import { WorkflowSkillsModule } from './modules/workflow-skills/workflow-skills.module';
 import { SessionFromSkillModule } from './modules/session-from-skill/session-from-skill.module';
 import { ScheduledSkillRunsModule } from './modules/scheduled-skill-runs/scheduled-skill-runs.module';
+import { UserSkillsModule } from './modules/user-skills/user-skills.module';
+import { SkillRunsModule } from './modules/skill-runs/skill-runs.module';
+import { SkillAuthoringModule } from './modules/skill-authoring/skill-authoring.module';
+import { OpenapiModule } from './modules/openapi/openapi.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { ValidationModule } from './common/validation/validation.module';
 
 @Module({
   imports: [
@@ -28,6 +34,7 @@ import { ScheduledSkillRunsModule } from './modules/scheduled-skill-runs/schedul
       ],
     }),
     DatabaseModule,
+    ValidationModule,
     CollaborationModule,
     GraphModule,
     SessionsModule,
@@ -40,6 +47,11 @@ import { ScheduledSkillRunsModule } from './modules/scheduled-skill-runs/schedul
     WorkflowCopilotModule,
     SessionFromSkillModule,
     ScheduledSkillRunsModule,
+    UserSkillsModule,
+    SkillRunsModule,
+    SkillAuthoringModule,
+    OpenapiModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

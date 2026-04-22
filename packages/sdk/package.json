@@ -1,0 +1,64 @@
+{
+  "name": "@cepage/sdk",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Typed TypeScript client for the Cepage HTTP API: list skills, run them, stream progress, and manage schedules.",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    },
+    "./skills": {
+      "types": "./dist/src/skills.d.ts",
+      "import": "./dist/src/skills.js",
+      "default": "./dist/src/skills.js"
+    },
+    "./runs": {
+      "types": "./dist/src/runs.d.ts",
+      "import": "./dist/src/runs.js",
+      "default": "./dist/src/runs.js"
+    },
+    "./webhooks": {
+      "types": "./dist/src/webhooks.d.ts",
+      "import": "./dist/src/webhooks.js",
+      "default": "./dist/src/webhooks.js"
+    },
+    "./signature": {
+      "types": "./dist/src/signature.d.ts",
+      "import": "./dist/src/signature.js",
+      "default": "./dist/src/signature.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "test": "pnpm build && node --test dist/__tests__/*.test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "cepage",
+    "sdk",
+    "skills",
+    "workflows",
+    "agents"
+  ]
+}

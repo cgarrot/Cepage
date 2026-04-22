@@ -1,0 +1,47 @@
+{
+  "name": "@cepage/mcp",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "MCP stdio server that exposes Cepage skills as typed tools to any MCP-compatible client (Cursor, Claude Code, Codex, OpenCode, VS Code Copilot, ...).",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "cepage-mcp": "./dist/bin/cepage-mcp.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "start": "node dist/bin/cepage-mcp.js",
+    "test": "pnpm build && node --test dist/__tests__/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@cepage/shared-core": "workspace:*",
+    "@cepage/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

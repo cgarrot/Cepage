@@ -32,6 +32,7 @@ You ──► Cepage canvas ──┬──► Cursor   (refactor)
 - **A graph, not a transcript.** Every prompt, response, branch, and contradiction is a typed node you can re-arrange, fork, or delete — no more lost context in chat scrollback.
 - **Live and bidirectional.** Agents stream their work into the canvas as they go. Humans can edit, override, or contradict any node mid-run.
 - **Time-travel.** Replay any session step by step. Branch from any past state.
+- **Skill Library.** Save any session as a reusable workflow with typed inputs/outputs (JSON Schema). Run it from the UI via an auto-form, from the API, on a schedule (cron), or from a global Cmd/Ctrl+K palette. Every run streams progress back over SSE and lands in a searchable history.
 
 ### Pronounced *say-pahzh*
 
@@ -186,6 +187,74 @@ That's it. No vendor lock-in, no proprietary protocol. If you can run an agent, 
 
 ---
 
+## Skill Library
+
+Everything you build on the canvas can be turned into a **typed, reusable skill**.
+
+- **Save-as-skill.** From any session, click _Save as skill_. Cepage detects `{{PLACEHOLDER}}` variables in your agent and control nodes and proposes a JSON Schema you can edit in a 3-step modal.
+- **Run from anywhere.** Once saved, a skill is available at [`/library/<slug>`](http://localhost:31961/library) with an auto-generated form. You can also run it via the REST API, the global Cmd/Ctrl+K palette, a cron schedule, or (in phase 2) the `@cepage/mcp` stdio server and the `cepage` CLI.
+- **Typed contract.** Inputs and outputs are validated with ajv at the API boundary. A failed run returns structured errors the UI can render under the right field.
+- **Observability.** Every run is a row you can open — inputs, outputs, errors, duration, triggering surface, and a live SSE stream while it's executing.
+
+The API surface (all under `/api/v1`):
+
+| Endpoint | What it does |
+| --- | --- |
+| `POST /sessions/:id/detect-inputs` | Suggest a JSON Schema from the session graph. |
+| `POST /sessions/:id/save-as-skill` | Persist the session as a `UserSkill`. |
+| `GET /skills` / `GET /skills/:slug` | List + read user skills. |
+| `POST /skills/:slug/runs` | Run a skill with typed inputs. Returns a `SkillRun`. |
+| `GET /skill-runs/:runId/stream` | SSE stream of lifecycle events for a run. |
+| `POST /scheduled-skill-runs` | Schedule a recurring skill run via cron. |
+| `GET /openapi.json` | Dynamic OpenAPI 3.1 document — one typed `POST /skills/:slug/runs` endpoint per skill in the catalog, with inputs/outputs schemas inlined. |
+
+Under the hood, filesystem-defined skills (`docs/workflow-prompt-library/**`) and DB-backed user skills are merged into a single catalog — both kinds are runnable from the same endpoints and the same Library UI.
+
+**TypeScript SDK.** `npm i @cepage/sdk` gives you a zero-dependency client with typed wrappers for every surface:
+
+```ts
+import { CepageClient } from '@cepage/sdk';
+
+const cepage = new CepageClient({ apiUrl: 'http://localhost:31947/api/v1' });
+const run = await cepage.skills.run('weekly-stripe-report', {
+  inputs: { startDate: '2026-04-14', endDate: '2026-04-21' },
+});
+console.log(run.outputs);
+```
+
+See [`packages/sdk/README.md`](packages/sdk/README.md) for streaming, schedules, and error handling.
+
+**Python SDK.** `pip install cepage` gives you the same surface in Python (sync and async):
+
+```python
+from cepage import CepageClient
+
+with CepageClient(api_url="http://localhost:31947/api/v1") as cepage:
+    run = cepage.skills.run(
+        "weekly-stripe-report",
+        inputs={"startDate": "2026-04-14", "endDate": "2026-04-21"},
+    )
+    print(run.outputs)
+```
+
+See [`packages/sdk-python/README.md`](packages/sdk-python/README.md) for async usage, streaming, and error handling.
+
+**CLI.** `@cepage/cli` exposes the same operations from your terminal:
+
+```bash
+cepage auth login --api-url http://localhost:31947/api/v1
+cepage skills list
+cepage skills run weekly-stripe-report \
+  --input startDate=2026-04-14 \
+  --input endDate=2026-04-21
+cepage runs stream run_abc123
+cepage schedules create --skill weekly-stripe-report --cron '0 9 * * 1' --inputs-file ./inputs.json
+```
+
+See [`apps/cli/README.md`](apps/cli/README.md) for every command and flag.
+
+---
+
 ## Roadmap
 
 Honest list of what's next, roughly in order:
@@ -197,6 +266,7 @@ Honest list of what's next, roughly in order:
 - **Native binary install** — single-file binary for users who don't want Node + Docker on their machine
 - **Adapter SDK** — make adding a new agent a 30-line PR
 - **Templates** — starter canvases for common workflows (refactor + test, research + draft, etc.)
+- **Interop layer for skills** — `@cepage/mcp` stdio server, auto-generated TS and Python SDKs, a `cepage` CLI, and outbound HMAC-signed webhooks so any IDE or agent framework can call a Cepage skill.
 
 If one of these matters to you, open an issue or thumbs-up an existing one — that's how we prioritise.
 
@@ -226,6 +296,7 @@ End-to-end pipelines built on top of Cepage live in `[examples/](examples)`. The
 | `[packages/shared-core](packages/shared-core)` | Shared types and DTOs                                            |
 | `[packages/ui-kit](packages/ui-kit)`           | Shared UI primitives                                             |
 | `[packages/config](packages/config)`           | Environment validation (Zod)                                     |
+| `[integrations/](integrations)`                | Drop-in configs for Cursor, OpenClaw, Hermes, Claude Desktop, webhook verifiers |
 
 
 ---

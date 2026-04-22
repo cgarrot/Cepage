@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cepage"
+version = "0.1.0"
+description = "Typed Python client for the Cepage HTTP API: list skills, run them, stream progress, and manage schedules."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "Cepage" }]
+keywords = ["cepage", "sdk", "skills", "workflows", "agents"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "httpx>=0.25,<1.0",
+  "typing-extensions>=4.7 ; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-asyncio>=0.23",
+  "respx>=0.20",
+  "mypy>=1.8",
+  "ruff>=0.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/cepage/cepage"
+Documentation = "https://github.com/cepage/cepage/tree/main/packages/sdk-python"
+Source = "https://github.com/cepage/cepage"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cepage"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_unused_ignores = true
+disallow_any_generics = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

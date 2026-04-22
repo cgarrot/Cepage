@@ -7,6 +7,7 @@ export type ScheduledSkillRunRow = {
   skillId: string;
   cron: string;
   request: SessionFromSkillBody;
+  inputs: Record<string, unknown> | null;
   status: 'active' | 'paused';
   nextRunAt: string;
   lastRunAt: string | null;
@@ -21,7 +22,8 @@ export type CreateScheduledSkillRunBody = {
   label?: string;
   skillId: string;
   cron: string;
-  request: SessionFromSkillBody;
+  request?: SessionFromSkillBody;
+  inputs?: Record<string, unknown>;
   status?: 'active' | 'paused';
   metadata?: Record<string, unknown> | null;
 };

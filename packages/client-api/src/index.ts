@@ -6,3 +6,7 @@ export * from './realtime';
 export * from './workflow-copilot';
 export * from './workflow-skills';
 export * from './scheduled-skill-runs';
+export * from './user-skills';
+export * from './skill-runs';
+export * from './skill-authoring';
+export * from './webhooks';

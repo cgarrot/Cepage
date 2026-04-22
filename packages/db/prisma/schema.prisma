@@ -485,6 +485,7 @@ model ScheduledSkillRun {
   skillId       String
   cron          String
   request       Json
+  inputs        Json?
   status        String   @default("active")
   nextRunAt     DateTime
   lastRunAt     DateTime?
@@ -604,4 +605,118 @@ model CopilotSettings {
   defaultProviderID String?
   defaultModelID    String?
   updatedAt         DateTime @updatedAt
+}
+
+// UserSkill: user-authored workflow skills saved from a session or via API.
+// Merges at runtime with the filesystem catalog (see WorkflowSkillsService).
+// `inputsSchema`/`outputsSchema` are JSON Schema used to generate forms,
+// validate runs, produce OpenAPI and typed SDKs. Core of Option C
+// (Typed Skill Contract). See docs/product-plan/03-typed-skill-contract.md.
+model UserSkill {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  version       String   @default("1.0.0")
+  title         String
+  summary       String
+  icon          String?
+  category      String?
+  tags          String[] @default([])
+
+  inputsSchema  Json
+  outputsSchema Json
+
+  kind          String   @default("workflow_template")
+  promptText    String?
+  graphJson     Json?
+  execution     Json?
+
+  sourceSessionId String?
+  visibility    String   @default("private")
+  ownerKey      String   @default("local-user")
+
+  validated     Boolean  @default(false)
+  deprecated    Boolean  @default(false)
+  replacedBySlug String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  runs          SkillRun[]
+
+  @@index([ownerKey])
+  @@index([visibility])
+  @@index([category])
+  @@index([deletedAt])
+}
+
+// SkillRun: one execution of a skill. Stores typed inputs and (when
+// completed) typed outputs, plus idempotency/correlation metadata. For
+// session-mode skills, `sessionId` links back to the spawned session.
+model SkillRun {
+  id            String   @id @default(uuid())
+  skillId       String
+  skillVersion  String
+  skillKind     String   @default("user")
+  userSkillId   String?
+  userSkill     UserSkill? @relation(fields: [userSkillId], references: [id], onDelete: SetNull)
+
+  status        String   @default("queued")
+  inputs        Json
+  outputs       Json?
+  error         Json?
+
+  sessionId     String?
+  triggeredBy   String
+  idempotencyKey String?
+  correlationId String?
+
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  durationMs    Int?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([skillId, createdAt])
+  @@index([status])
+  @@index([skillId, skillVersion, idempotencyKey])
+}
+
+// WebhookSubscription: outbound HMAC-signed notifications fired on
+// skill-run lifecycle events. Scoped to a specific skillId or all skills
+// if skillId is null. See docs/product-plan/06-distribution-and-integrations.md.
+model WebhookSubscription {
+  id          String   @id @default(uuid())
+  url         String
+  secret      String
+  events      String[] @default([])
+  skillId     String?
+  active      Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveryAttempts WebhookDeliveryAttempt[]
+
+  @@index([active])
+}
+
+model WebhookDeliveryAttempt {
+  id                   String   @id @default(uuid())
+  webhookSubscriptionId String
+  webhookSubscription  WebhookSubscription @relation(fields: [webhookSubscriptionId], references: [id], onDelete: Cascade)
+  event                String
+  payload              Json
+  responseStatus       Int?
+  responseBody         String?
+  error                String?
+  attemptedAt          DateTime @default(now())
+  succeededAt          DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([webhookSubscriptionId])
+  @@index([event])
+  @@index([attemptedAt])
 }

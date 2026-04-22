@@ -45,6 +45,7 @@ const envSchema = z.object({
     .enum(['1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'])
     .optional(),
   AGENT_POLICY_BOOTSTRAP_PATH: z.string().optional(),
+  CEPAGE_SKILL_RUN_RATE_LIMIT: z.coerce.number().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

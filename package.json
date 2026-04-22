@@ -18,6 +18,7 @@
     "daemon:build": "pnpm --filter @cepage/daemon run build",
     "daemon": "pnpm --filter @cepage/daemon exec cepage-daemon",
     "workflow:test:real": "node scripts/workflow-real-tester.mjs",
+    "integrations:smoke": "pnpm --filter @cepage/integrations-smoke run smoke:mcp",
     "db:generate": "node scripts/run-prisma.mjs generate",
     "db:migrate:dev": "node scripts/run-prisma.mjs migrate dev",
     "db:push": "node scripts/run-prisma.mjs db push"

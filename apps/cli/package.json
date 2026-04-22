@@ -1,0 +1,43 @@
+{
+  "name": "@cepage/cli",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Cepage command-line interface: list, run, and schedule typed skills from your terminal.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "bin": {
+    "cepage": "./dist/src/cli.js"
+  },
+  "main": "./dist/src/cli.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --max-warnings=0",
+    "clean": "rm -rf dist",
+    "start": "node ./dist/src/cli.js",
+    "test": "pnpm build && node --test dist/__tests__/*.test.js"
+  },
+  "dependencies": {
+    "@cepage/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "cepage",
+    "cli",
+    "skills",
+    "workflows",
+    "agents"
+  ]
+}

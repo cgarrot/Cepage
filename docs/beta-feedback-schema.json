@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skill Compiler Beta Feedback",
+  "description": "Feedback form for Skill Compiler beta testers. Collects the Would Use gate metric and qualitative ratings.",
+  "type": "object",
+  "required": [
+    "would_use",
+    "agent_used"
+  ],
+  "properties": {
+    "would_use": {
+      "type": "boolean",
+      "description": "The Phase 1 Gate metric. Would you use the Skill Compiler as part of your regular workflow?"
+    },
+    "compilation_quality": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "How well did the compiler extract and structure the execution graph? (1 = poor, 5 = excellent)"
+    },
+    "parameter_accuracy": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "How accurate was parameter detection? Did it find the right values to parameterize? (1 = poor, 5 = excellent)"
+    },
+    "ui_ease_of_use": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "How easy was the compilation review page to understand and use? (1 = confusing, 5 = intuitive)"
+    },
+    "missing_features": {
+      "type": "string",
+      "description": "What features or capabilities are missing that would make you say yes to the Would Use question?"
+    },
+    "bugs_found": {
+      "type": "string",
+      "description": "Describe any bugs, errors, or unexpected behavior you encountered during testing."
+    },
+    "agent_used": {
+      "type": "string",
+      "enum": [
+        "cursor",
+        "opencode",
+        "both"
+      ],
+      "description": "Which agent(s) did you test the compiler with?"
+    }
+  },
+  "additionalProperties": false
+}

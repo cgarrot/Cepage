@@ -38,6 +38,22 @@ export interface CompilationResult {
   report: CompilationReport;
 }
 
+export interface CompilerMetric {
+  event:
+    | 'compilation_started'
+    | 'compilation_completed'
+    | 'compilation_failed'
+    | 'skill_published'
+    | 'skill_rejected';
+  timestamp: string;
+  sessionId?: string;
+  agentType?: 'opencode' | 'cursor';
+  mode?: 'draft' | 'publish';
+  durationMs?: number;
+  errorType?: string;
+  stage?: string;
+}
+
 type CompilerSkillDraft = Omit<Partial<UserSkillRow>, 'execution' | 'graphJson'> & {
   execution: WorkflowSkillExecution;
   graphJson: Record<string, unknown>;
@@ -57,6 +73,8 @@ const MAX_SLUG_SUFFIX = 100;
 
 @Injectable()
 export class CompilerService {
+  private metrics: CompilerMetric[] = [];
+
   constructor(
     private readonly opencodeExtractor: OpencodeExtractorService,
     private readonly cursorExtractor: CursorExtractorService,
@@ -66,10 +84,44 @@ export class CompilerService {
     private readonly userSkillsService: UserSkillsService,
   ) {}
 
+  getMetrics(): CompilerMetric[] {
+    return [...this.metrics];
+  }
+
+  clearMetrics(): void {
+    this.metrics = [];
+  }
+
+  trackSkillRejected(sessionId: string, agentType: 'opencode' | 'cursor'): void {
+    const metric: CompilerMetric = {
+      event: 'skill_rejected',
+      timestamp: new Date().toISOString(),
+      sessionId,
+      agentType,
+    };
+    this.metrics.push(metric);
+    console.log(`[CompilerAnalytics] ${metric.event}`, metric);
+  }
+
+  private trackEvent(metric: CompilerMetric): void {
+    this.metrics.push(metric);
+    console.log(`[CompilerAnalytics] ${metric.event}`, metric);
+  }
+
   async compile(options: CompileOptions): Promise<CompilationResult> {
+    const startTime = Date.now();
     this.validateOptions(options);
 
-    const extracted = await this.extractSession(options);
+    this.trackEvent({
+      event: 'compilation_started',
+      timestamp: new Date().toISOString(),
+      sessionId: options.sessionId,
+      agentType: options.agentType,
+      mode: options.mode,
+    });
+
+    try {
+      const extracted = await this.extractSession(options);
     if (!extracted.nodes.length) {
       throw new BadRequestException(`SKILL_COMPILER_EMPTY_SESSION:${options.sessionId}`);
     }
@@ -123,6 +175,25 @@ export class CompilerService {
         ? await this.persistSkill(draftSkill)
         : draftSkill;
 
+    if (options.mode === 'publish') {
+      this.trackEvent({
+        event: 'skill_published',
+        timestamp: new Date().toISOString(),
+        sessionId: options.sessionId,
+        agentType: options.agentType,
+        mode: options.mode,
+      });
+    }
+
+    this.trackEvent({
+      event: 'compilation_completed',
+      timestamp: new Date().toISOString(),
+      sessionId: options.sessionId,
+      agentType: options.agentType,
+      mode: options.mode,
+      durationMs: Date.now() - startTime,
+    });
+
     return {
       skill,
       report: {
@@ -135,7 +206,24 @@ export class CompilerService {
         warnings,
       },
     };
+  } catch (error) {
+    const errorType = error instanceof HttpException
+      ? error.message.split(':')[0] ?? 'UNKNOWN'
+      : 'INTERNAL_ERROR';
+
+    this.trackEvent({
+      event: 'compilation_failed',
+      timestamp: new Date().toISOString(),
+      sessionId: options.sessionId,
+      agentType: options.agentType,
+      mode: options.mode,
+      durationMs: Date.now() - startTime,
+      errorType,
+    });
+
+    throw error;
   }
+}
 
   private validateOptions(options: CompileOptions): void {
     if (!options.sessionId?.trim()) {

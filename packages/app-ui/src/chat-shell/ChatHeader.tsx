@@ -6,6 +6,7 @@ import {
   Button,
   IconButton,
   IconPanelRight,
+  IconSparkles,
   IconStudio,
   Spinner,
   Tooltip,
@@ -21,6 +22,7 @@ import { ThemeToggle } from './ThemeToggle';
 type ChatHeaderProps = {
   onOpenStudio: () => void;
   onConfigureWorkspace: () => void;
+  onSaveAsSkill: () => void;
   onToggleFiles: () => void;
   filesOpen: boolean;
 };
@@ -32,6 +34,7 @@ type ChatHeaderProps = {
 export function ChatHeader({
   onOpenStudio,
   onConfigureWorkspace,
+  onSaveAsSkill,
   onToggleFiles,
   filesOpen,
 }: ChatHeaderProps) {
@@ -88,6 +91,16 @@ export function ChatHeader({
           <Button variant="ghost" size="sm" onClick={onConfigureWorkspace} disabled={!sessionId}>
             {t(sessionWorkspace ? 'ui.menu.editSessionWorkspace' : 'ui.menu.configureWorkspace')}
           </Button>
+          <Tooltip label={t('ui.chat.saveAsSkillTooltip')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onSaveAsSkill}
+              disabled={!sessionId}
+            >
+              <IconSparkles size={14} /> {t('ui.chat.saveAsSkill')}
+            </Button>
+          </Tooltip>
           <Button variant="ghost" size="sm" onClick={onOpenStudio} disabled={!sessionId}>
             <IconStudio size={14} /> {t('ui.simple.openStudio')}
           </Button>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Panel, PanelGroup, type ImperativePanelHandle } from 'react-resizable-panels';
 import { useWorkspaceStore } from '@cepage/state';
+import { SaveAsSkillDialog } from '../SaveAsSkillDialog';
 import { SessionWorkspaceDialog } from '../SessionWorkspaceDialog';
 import { ChatComposer } from './ChatComposer';
 import { ChatHeader } from './ChatHeader';
@@ -61,6 +62,7 @@ export function ChatShell({ onOpenStudio }: ChatShellProps) {
 
   const [filesOpen, setFilesOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [saveAsSkillOpen, setSaveAsSkillOpen] = useState(false);
   const filesPanelRef = useRef<ImperativePanelHandle | null>(null);
 
   useEffect(() => {
@@ -121,6 +123,17 @@ export function ChatShell({ onOpenStudio }: ChatShellProps) {
     void openWorkspaceDialog();
   }, [openWorkspaceDialog]);
 
+  const onSaveAsSkill = useCallback(() => {
+    if (!sessionId) return;
+    setSaveAsSkillOpen(true);
+  }, [sessionId]);
+  const onCloseSaveAsSkill = useCallback(() => {
+    setSaveAsSkillOpen(false);
+  }, []);
+  const onSavedSkill = useCallback(() => {
+    setSaveAsSkillOpen(false);
+  }, []);
+
   // IDE-style global shortcuts. We intentionally restrict to Cmd/Ctrl+B
   // (sidebar) and Cmd/Ctrl+J (workspace files panel) to mirror VS Code /
   // Cursor and avoid colliding with browser defaults like Cmd/Ctrl+K.
@@ -151,6 +164,7 @@ export function ChatShell({ onOpenStudio }: ChatShellProps) {
       <ChatHeader
         onOpenStudio={() => onOpenStudio()}
         onConfigureWorkspace={onConfigureWorkspace}
+        onSaveAsSkill={onSaveAsSkill}
         onToggleFiles={toggleFiles}
         filesOpen={filesOpen}
       />
@@ -199,6 +213,14 @@ export function ChatShell({ onOpenStudio }: ChatShellProps) {
         onChooseParentDirectory={() => void browseWorkspaceParentDirectory()}
         onClose={closeWorkspaceDialog}
         onSave={() => void saveWorkspace()}
+      />
+
+      <SaveAsSkillDialog
+        open={saveAsSkillOpen}
+        sessionId={sessionId}
+        suggestedTitle={copilotThread?.title ?? undefined}
+        onClose={onCloseSaveAsSkill}
+        onSaved={onSavedSkill}
       />
     </div>
   );

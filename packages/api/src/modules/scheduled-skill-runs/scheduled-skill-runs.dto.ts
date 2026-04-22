@@ -35,6 +35,10 @@ export class CreateScheduledSkillRunDto {
 
   @IsOptional()
   @IsObject()
+  inputs?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
   metadata?: Record<string, unknown>;
 }
 
@@ -52,6 +56,10 @@ export class UpdateScheduledSkillRunDto {
   @ValidateNested()
   @Type(() => SessionFromSkillBodyDto)
   request?: SessionFromSkillBodyDto;
+
+  @IsOptional()
+  @IsObject()
+  inputs?: Record<string, unknown>;
 
   @IsOptional()
   @IsIn(['active', 'paused'])
@@ -72,6 +80,7 @@ export type ScheduledSkillRunRow = {
   skillId: string;
   cron: string;
   request: SessionFromSkillBodyDto;
+  inputs: Record<string, unknown> | null;
   status: 'active' | 'paused' | 'failed';
   nextRunAt: string;
   lastRunAt: string | null;

@@ -15,6 +15,7 @@ import {
 } from '../../common/utils/cron-schedule.util';
 import { WorkflowSkillsService } from '../workflow-skills/workflow-skills.service';
 import { SessionFromSkillService } from '../session-from-skill/session-from-skill.service';
+import { SkillRunsService } from '../skill-runs/skill-runs.service';
 import type { SessionFromSkillBodyDto } from '../session-from-skill/session-from-skill.dto';
 import {
   type CreateScheduledSkillRunDto,
@@ -39,6 +40,7 @@ type DbRow = {
   skillId: string;
   cron: string;
   request: unknown;
+  inputs: unknown;
   status: string;
   nextRunAt: Date;
   lastRunAt: Date | null;
@@ -58,6 +60,7 @@ export class ScheduledSkillRunsService implements OnModuleInit, OnModuleDestroy 
     private readonly prisma: PrismaService,
     private readonly skills: WorkflowSkillsService,
     private readonly fromSkill: SessionFromSkillService,
+    private readonly skillRuns: SkillRunsService,
   ) {}
 
   onModuleInit(): void {
@@ -96,6 +99,7 @@ export class ScheduledSkillRunsService implements OnModuleInit, OnModuleDestroy 
         cron: input.cron,
         label: input.label ?? null,
         request: json((input.request ?? {}) as Record<string, unknown>),
+        inputs: json((input.inputs ?? {}) as Record<string, unknown>),
         status: nextRunAt ? 'active' : 'paused',
         nextRunAt: nextRunAt ?? now,
         metadata: nullableJson(input.metadata),
@@ -140,6 +144,9 @@ export class ScheduledSkillRunsService implements OnModuleInit, OnModuleDestroy 
         ...(patch.label !== undefined ? { label: patch.label } : {}),
         ...(patch.request !== undefined
           ? { request: json(patch.request as unknown as Record<string, unknown>) }
+          : {}),
+        ...(patch.inputs !== undefined
+          ? { inputs: json(patch.inputs as Record<string, unknown>) }
           : {}),
         ...(patch.metadata !== undefined ? { metadata: nullableJson(patch.metadata) } : {}),
         status,
@@ -193,20 +200,40 @@ export class ScheduledSkillRunsService implements OnModuleInit, OnModuleDestroy 
   async executeOne(id: string): Promise<void> {
     const row = await this.prisma.scheduledSkillRun.findUnique({ where: { id } });
     if (!row) return;
-    const request = (row.request ?? {}) as SessionFromSkillBodyDto;
     const startedAt = new Date();
+    const hasInputs =
+      row.inputs != null &&
+      Object.keys(row.inputs as Record<string, unknown>).length > 0;
     try {
-      const result = await this.fromSkill.scaffold(row.skillId, request);
+      let sessionId: string | null = null;
+      if (hasInputs) {
+        const result = await this.skillRuns.create(
+          row.skillId,
+          {
+            inputs: row.inputs as Record<string, unknown>,
+            triggeredBy: 'schedule',
+          },
+          { wait: true },
+        );
+        if ('code' in result) {
+          throw new Error(`INVALID_INPUT: ${JSON.stringify(result.errors)}`);
+        }
+        sessionId = result.sessionId;
+      } else {
+        const request = (row.request ?? {}) as SessionFromSkillBodyDto;
+        const result = await this.fromSkill.scaffold(row.skillId, request);
+        sessionId = result.sessionId;
+      }
       await this.prisma.scheduledSkillRun.update({
         where: { id: row.id },
         data: {
           lastRunAt: startedAt,
-          lastSessionId: result.sessionId,
+          lastSessionId: sessionId,
           lastError: null,
         },
       });
       this.log.log(
-        `[scheduled-skill-runs ${row.id}] skill=${row.skillId} session=${result.sessionId} mode=${result.mode}`,
+        `[scheduled-skill-runs ${row.id}] skill=${row.skillId} session=${sessionId ?? 'none'}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -231,6 +258,7 @@ export class ScheduledSkillRunsService implements OnModuleInit, OnModuleDestroy 
       skillId: row.skillId,
       cron: row.cron,
       request: (row.request ?? {}) as SessionFromSkillBodyDto,
+      inputs: (row.inputs as Record<string, unknown> | null) ?? null,
       status: (row.status as ScheduledSkillRunRow['status']) ?? 'active',
       nextRunAt: row.nextRunAt.toISOString(),
       lastRunAt: row.lastRunAt ? row.lastRunAt.toISOString() : null,

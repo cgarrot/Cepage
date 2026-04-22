@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import {
   workflowSkillCatalogSchema,
   type WorkflowSkill,
@@ -8,6 +8,8 @@ import {
   type WorkflowSkillKind,
   type WorkflowSkillRef,
 } from '@cepage/shared-core';
+import { UserSkillsService } from '../user-skills/user-skills.service';
+import { userSkillRowToWorkflowSkill } from '../user-skills/user-skills.mapper';
 
 type WorkflowSkillRoute = {
   skill: WorkflowSkill;
@@ -100,6 +102,24 @@ export class WorkflowSkillsService {
   private cache: WorkflowSkillCatalog | null = null;
   private promptBaseDirs = new Map<string, string>();
   private privateCatalogMissing = false;
+  private userSkillIds = new Set<string>();
+
+  constructor(
+    // Optional so that node:test suites can construct the service without
+    // bringing up the DB + user-skills graph. Production Nest DI always
+    // provides the dependency via UserSkillsModule.
+    @Optional()
+    @Inject(forwardRef(() => UserSkillsService))
+    private readonly userSkills?: UserSkillsService,
+  ) {}
+
+  invalidate(): void {
+    this.cache = null;
+  }
+
+  isUserSkill(id: string): boolean {
+    return this.userSkillIds.has(id);
+  }
 
   private catalogRoots(): string[] {
     return [
@@ -232,26 +252,62 @@ export class WorkflowSkillsService {
 
     const sources = await this.discoverCatalogSources();
 
+    // Precedence: private FS > user DB > public FS > extras.
+    // First-seen wins across sources so private files can override any
+    // downstream source and user-authored skills can shadow public ones.
+    const privateSources = sources.filter((source) => source.kind === 'private');
+    const publicSources = sources.filter((source) => source.kind === 'public');
+    const extraSources = sources.filter((source) => source.kind === 'extra');
+
     const merged: WorkflowSkill[] = [];
     const seen = new Set<string>();
     this.promptBaseDirs = new Map<string, string>();
+    this.userSkillIds = new Set<string>();
 
     let schemaVersion = '1';
     let generatedAt: string | undefined;
 
-    for (const source of sources) {
+    const absorbFsSource = async (source: WorkflowCatalogSource): Promise<void> => {
       const catalog = await this.readCatalog(source);
       schemaVersion = catalog.schemaVersion;
       generatedAt ??= catalog.generatedAt;
-
       for (const skill of catalog.skills) {
-        if (seen.has(skill.id)) {
-          continue;
-        }
+        if (seen.has(skill.id)) continue;
         seen.add(skill.id);
         merged.push(skill);
         this.promptBaseDirs.set(skill.id, source.baseDir);
       }
+    };
+
+    for (const source of privateSources) {
+      await absorbFsSource(source);
+    }
+
+    // User skills slot between private FS and public FS so that users can
+    // shadow public built-ins but private overrides still win.
+    if (this.userSkills) {
+      try {
+        const userRows = await this.userSkills.list();
+        for (const row of userRows) {
+          if (seen.has(row.slug)) continue;
+          seen.add(row.slug);
+          this.userSkillIds.add(row.slug);
+          merged.push(userSkillRowToWorkflowSkill(row));
+        }
+      } catch (err) {
+        // If DB is down at boot (e.g. generating OpenAPI offline), we still
+        // serve the FS-only catalog rather than blowing up.
+        console.warn(
+          `[workflow-skills] user-skill merge failed, falling back to FS only: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    for (const source of publicSources) {
+      await absorbFsSource(source);
+    }
+    for (const source of extraSources) {
+      await absorbFsSource(source);
     }
 
     const parsed = workflowSkillCatalogSchema.parse({

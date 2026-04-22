@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { SessionFromSkillModule } from '../session-from-skill/session-from-skill.module';
+import { SkillRunsModule } from '../skill-runs/skill-runs.module';
 import { WorkflowSkillsModule } from '../workflow-skills/workflow-skills.module';
 import { ScheduledSkillRunsController } from './scheduled-skill-runs.controller';
 import { ScheduledSkillRunsService } from './scheduled-skill-runs.service';
 
 @Module({
-  imports: [SessionFromSkillModule, WorkflowSkillsModule],
+  imports: [SessionFromSkillModule, WorkflowSkillsModule, SkillRunsModule],
   controllers: [ScheduledSkillRunsController],
   providers: [ScheduledSkillRunsService],
   exports: [ScheduledSkillRunsService],

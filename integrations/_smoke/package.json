@@ -1,0 +1,14 @@
+{
+  "name": "@cepage/integrations-smoke",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Smoke tests for Cepage reference integrations.",
+  "scripts": {
+    "smoke:mcp": "node mcp-smoke.mjs"
+  },
+  "dependencies": {
+    "@cepage/mcp": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

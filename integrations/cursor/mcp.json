@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cepage": {
+      "command": "npx",
+      "args": ["-y", "@cepage/mcp"],
+      "env": {
+        "CEPAGE_URL": "http://localhost:31947"
+      }
+    }
+  }
+}

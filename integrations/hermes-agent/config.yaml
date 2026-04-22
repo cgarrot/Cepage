@@ -1,0 +1,27 @@
+# Hermes MCP server config for Cepage.
+#
+# Usage: merge this block into your existing ~/.hermes/config.yaml
+# (or append it if you have no other mcp_servers entries).
+
+mcp_servers:
+  cepage:
+    command: npx
+    args: ["-y", "@cepage/mcp"]
+    env:
+      CEPAGE_URL: "http://localhost:31947"
+      # Uncomment and set if your API requires auth:
+      # CEPAGE_TOKEN: "${CEPAGE_TOKEN}"
+    # Optional: only expose a subset of skills as Hermes tools.
+    # tools:
+    #   include:
+    #     - weekly_stripe_report
+    #     - summarize_inbox
+    #   prompts: false
+    #   resources: false
+
+# Hermes auto-creates an `mcp-cepage` toolset from the entry above.
+# Add it to your CLI/platform toolsets:
+#
+# toolsets:
+#   - hermes-cli
+#   - mcp-cepage

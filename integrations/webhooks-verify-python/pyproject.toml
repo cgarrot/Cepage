@@ -1,0 +1,13 @@
+[project]
+name = "cepage-webhook-receiver"
+version = "0.0.0"
+description = "Minimal FastAPI receiver that verifies Cepage-Signature headers."
+requires-python = ">=3.10"
+dependencies = [
+    "cepage-sdk",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[tool.uv.sources]
+cepage-sdk = { path = "../../packages/sdk-python", editable = true }

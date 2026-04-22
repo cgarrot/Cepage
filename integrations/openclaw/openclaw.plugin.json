@@ -1,0 +1,10 @@
+{
+  "id": "cepage",
+  "name": "Cepage Skills",
+  "description": "Expose every skill in your Cepage catalog as MCP tools inside OpenClaw embedded Pi sessions.",
+  "enabledByDefault": true,
+  "bundleFormat": "claude",
+  "mcpServers": [".mcp.json"],
+  "homepage": "https://github.com/your-org/cepage",
+  "license": "MIT"
+}

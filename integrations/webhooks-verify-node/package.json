@@ -1,0 +1,17 @@
+{
+  "name": "cepage-webhook-receiver-node",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Minimal Express receiver that verifies Cepage-Signature headers.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@cepage/sdk": "workspace:*",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -33,6 +33,7 @@ You ──► Cepage canvas ──┬──► Cursor   (refactor)
 - **Live and bidirectional.** Agents stream their work into the canvas as they go. Humans can edit, override, or contradict any node mid-run.
 - **Time-travel.** Replay any session step by step. Branch from any past state.
 - **Skill Library.** Save any session as a reusable workflow with typed inputs/outputs (JSON Schema). Run it from the UI via an auto-form, from the API, on a schedule (cron), or from a global Cmd/Ctrl+K palette. Every run streams progress back over SSE and lands in a searchable history.
+- **Skill Compiler.** Turn a Cursor or OpenCode session into a compiled, parameterized skill. Extract the execution graph, replace hardcoded values with typed parameters, dry-run at zero cost, and reuse the same workflow for different inputs.
 
 ### Pronounced *say-pahzh*
 
@@ -255,6 +256,39 @@ See [`apps/cli/README.md`](apps/cli/README.md) for every command and flag.
 
 ---
 
+## Skill Compiler
+
+The Skill Compiler turns one-off agent sessions into reusable, typed skills.
+
+After Cursor or OpenCode finishes a task, you send the session to Cepage. Cepage extracts the execution graph, replaces concrete values like "Stripe" with typed parameters like `{{payment_provider}}`, runs a zero-cost dry-run validation, and emits a skill you can call from the CLI, SDK, or any MCP client.
+
+**How it works in 30 seconds:**
+
+```bash
+# Capture a Cursor session
+cepage import cursor --latest
+
+# Capture an OpenCode session
+cepage run opencode --capture --prompt "Build a Stripe integration"
+
+# Review parameters in the browser, then dry-run
+cepage skills dry-run payment-integration --input payment_provider=paypal
+
+# Run the compiled skill
+cepage skills run payment-integration --input payment_provider=paypal --input api_key=xxx
+```
+
+**What you get:**
+
+- **Extract** — Parse transcripts, diffs, and tool calls into a canonical execution graph.
+- **Parameterize** — Replace hardcoded values with typed placeholders and a JSON Schema.
+- **Validate** — Dry-run with a mock LLM in an isolated worktree. Costs $0. Catches structural errors before publication.
+- **Reuse** — Run the skill from the Library UI, CLI, TypeScript SDK, Python SDK, or any MCP-compatible agent.
+
+See the full guide: [Getting Started with the Skill Compiler](docs/getting-started-compiler.md).
+
+---
+
 ## Roadmap
 
 Honest list of what's next, roughly in order:
@@ -317,6 +351,7 @@ pnpm build
 ## Documentation
 
 - [Architecture and conventions](AGENTS.md)
+- [Getting Started with the Skill Compiler](docs/getting-started-compiler.md)
 - [Workflow skill catalog](docs/workflow-prompt-library/)
 
 ---

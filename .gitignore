@@ -26,3 +26,6 @@ playwright-report/
 
 # Private / personal scripts — kept locally, never committed
 private-scripts/
+
+# Playwright MCP test artifacts
+.playwright-mcp/

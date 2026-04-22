@@ -4,10 +4,14 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   detectSkillInputs,
   saveSessionAsSkill,
+  compileSkill,
+  previewCompile,
   type DetectInputsResult,
   type UserSkillRow,
+  type CompilationResult,
 } from '@cepage/client-api';
 import type { JsonSchema } from '@cepage/shared-core';
+import { ParameterEditor } from './ParameterEditor.js';
 
 // 3-step dialog that turns a live session into a reusable skill.
 //
@@ -27,7 +31,8 @@ export type SaveAsSkillDialogProps = {
   onSaved: (skill: UserSkillRow) => void;
 };
 
-type Step = 'identity' | 'inputs' | 'outputs';
+type Step = 'identity' | 'inputs' | 'outputs' | 'parameters';
+type SaveMode = 'raw' | 'compile';
 
 const CATEGORIES = [
   'Automation',
@@ -76,6 +81,7 @@ export function SaveAsSkillDialog({
   onClose,
   onSaved,
 }: SaveAsSkillDialogProps) {
+  const [saveMode, setSaveMode] = useState<SaveMode>('raw');
   const [step, setStep] = useState<Step>('identity');
   const [detection, setDetection] = useState<DetectInputsResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,35 +99,65 @@ export function SaveAsSkillDialog({
   const [inputsText, setInputsText] = useState('{}');
   const [outputsText, setOutputsText] = useState('{}');
 
+  const [compilePreview, setCompilePreview] = useState<CompilationResult | null>(null);
+  const [compileInputsSchema, setCompileInputsSchema] = useState<JsonSchema>({ type: 'object', properties: {} });
+  const [compileError, setCompileError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open || !sessionId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setCompileError(null);
     setStep('identity');
     setDetection(null);
     setBusy(false);
-    void (async () => {
-      const res = await detectSkillInputs(sessionId);
-      if (cancelled) return;
-      setLoading(false);
-      if (!res.success) {
-        setError(res.error.message);
-        return;
-      }
-      setDetection(res.data);
-      setInputsText(pretty(res.data.inputsSchema));
-      setOutputsText(pretty(res.data.outputsSchema));
-      // Do not read `title` from the effect closure: apply suggested title only
-      // if the user still has not typed anything (avoids race with slow network).
-      if (suggestedTitle) {
-        setTitle((t) => (t.trim() ? t : suggestedTitle));
-      }
-    })();
+    setCompilePreview(null);
+
+    if (saveMode === 'raw') {
+      void (async () => {
+        const res = await detectSkillInputs(sessionId);
+        if (cancelled) return;
+        setLoading(false);
+        if (!res.success) {
+          setError(res.error.message);
+          return;
+        }
+        setDetection(res.data);
+        setInputsText(pretty(res.data.inputsSchema));
+        setOutputsText(pretty(res.data.outputsSchema));
+        // Do not read `title` from the effect closure: apply suggested title only
+        // if the user still has not typed anything (avoids race with slow network).
+        if (suggestedTitle) {
+          setTitle((t) => (t.trim() ? t : suggestedTitle));
+        }
+      })();
+    } else {
+      void (async () => {
+        const res = await previewCompile(sessionId, 'opencode');
+        if (cancelled) return;
+        setLoading(false);
+        if (!res.success) {
+          setError(res.error.message);
+          setCompileError(res.error.message);
+          return;
+        }
+        setCompilePreview(res.data);
+        setCompileInputsSchema(res.data.skill.inputsSchema ?? { type: 'object', properties: {} });
+        setTitle((t) => (t.trim() ? t : (res.data.skill.title ?? suggestedTitle ?? '')));
+        setSummary((s) => (s.trim() ? s : (res.data.skill.summary ?? '')));
+        if (res.data.skill.icon) setIcon(res.data.skill.icon);
+        if (res.data.skill.category) setCategory(res.data.skill.category);
+        if (res.data.skill.tags?.length) setTagsRaw(res.data.skill.tags.join(', '));
+        if (suggestedTitle) {
+          setTitle((t) => (t.trim() ? t : suggestedTitle));
+        }
+      })();
+    }
     return () => {
       cancelled = true;
     };
-  }, [open, sessionId, suggestedTitle]);
+  }, [open, sessionId, saveMode, suggestedTitle]);
 
   const derivedSlug = useMemo(() => (slug ? slugify(slug) : slugify(title)), [slug, title]);
 
@@ -132,35 +168,53 @@ export function SaveAsSkillDialog({
   const canSave =
     Boolean(title.trim()) &&
     Boolean(summary.trim()) &&
-    parsedInputs.ok &&
-    parsedOutputs.ok &&
-    Boolean(sessionId);
+    Boolean(sessionId) &&
+    (saveMode === 'raw'
+      ? parsedInputs.ok && parsedOutputs.ok
+      : compilePreview !== null);
 
   const onSave = async (): Promise<void> => {
     if (!sessionId || !canSave || busy) return;
     setBusy(true);
     setError(null);
-    const tags = tagsRaw
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
-    const res = await saveSessionAsSkill(sessionId, {
-      slug: derivedSlug,
-      title: title.trim(),
-      summary: summary.trim(),
-      icon: icon.trim() || undefined,
-      category,
-      tags,
-      inputsSchema: parsedInputs.ok ? parsedInputs.value : undefined,
-      outputsSchema: parsedOutputs.ok ? parsedOutputs.value : undefined,
-      visibility,
-    });
-    setBusy(false);
-    if (!res.success) {
-      setError(res.error.message);
-      return;
+    setCompileError(null);
+
+    if (saveMode === 'raw') {
+      const tags = tagsRaw
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const res = await saveSessionAsSkill(sessionId, {
+        slug: derivedSlug,
+        title: title.trim(),
+        summary: summary.trim(),
+        icon: icon.trim() || undefined,
+        category,
+        tags,
+        inputsSchema: parsedInputs.ok ? parsedInputs.value : undefined,
+        outputsSchema: parsedOutputs.ok ? parsedOutputs.value : undefined,
+        visibility,
+      });
+      setBusy(false);
+      if (!res.success) {
+        setError(res.error.message);
+        return;
+      }
+      onSaved(res.data);
+    } else {
+      const res = await compileSkill({
+        sessionId,
+        agentType: 'opencode',
+        mode: 'publish',
+      });
+      setBusy(false);
+      if (!res.success) {
+        setError(res.error.message);
+        setCompileError(res.error.message);
+        return;
+      }
+      onSaved(res.data.skill as unknown as UserSkillRow);
     }
-    onSaved(res.data);
   };
 
   return (
@@ -177,13 +231,45 @@ export function SaveAsSkillDialog({
           it from Cursor / Claude Code / Codex via MCP.
         </p>
 
-        <nav style={tabsRow}>
+        <div style={modeToggleRow}>
           {(
             [
-              ['identity', '1. Identity'],
-              ['inputs', '2. Inputs'],
-              ['outputs', '3. Outputs'],
+              ['raw', 'Save as Skill'],
+              ['compile', 'Compile with Parameters'],
             ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setSaveMode(id);
+                setStep('identity');
+                setError(null);
+                setCompileError(null);
+              }}
+              style={modeToggleStyle(saveMode === id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <nav style={tabsRow}>
+          {(
+            saveMode === 'raw'
+              ? (
+                [
+                  ['identity', '1. Identity'],
+                  ['inputs', '2. Inputs'],
+                  ['outputs', '3. Outputs'],
+                ] as const
+              )
+              : (
+                [
+                  ['identity', '1. Identity'],
+                  ['parameters', '2. Parameters'],
+                ] as const
+              )
           ).map(([id, label]) => (
             <button
               key={id}
@@ -198,8 +284,10 @@ export function SaveAsSkillDialog({
 
         <div style={bodyStyle}>
           {loading ? (
-            <p style={{ padding: 20, color: 'var(--z-fg-muted)' }}>Inspecting session…</p>
-          ) : error ? (
+            <p style={{ padding: 20, color: 'var(--z-fg-muted)' }}>
+              {saveMode === 'compile' ? 'Compiling preview…' : 'Inspecting session…'}
+            </p>
+          ) : error && !compileError ? (
             <p style={{ padding: 20, color: 'var(--z-fg-status)' }}>{error}</p>
           ) : step === 'identity' ? (
             <IdentityStep
@@ -232,7 +320,7 @@ export function SaveAsSkillDialog({
                   : 'No {{variables}} detected in session text. You can still define inputs manually.'
               }
             />
-          ) : (
+          ) : step === 'outputs' ? (
             <SchemaStep
               label="Outputs JSON Schema"
               value={outputsText}
@@ -240,36 +328,79 @@ export function SaveAsSkillDialog({
               parsed={parsedOutputs}
               hint="Defaults wrap the session scaffold result (sessionId, mode, workspaceDir). Adjust to expose any other structured data your workflow produces."
             />
+          ) : (
+            <CompileParametersStep
+              preview={compilePreview}
+              schema={compileInputsSchema}
+              onSchemaChange={setCompileInputsSchema}
+            />
           )}
         </div>
 
         <footer style={footerStyle}>
-          {error ? (
-            <span style={{ color: 'var(--z-fg-status)', fontSize: 12 }}>{error}</span>
-          ) : (
-            <span style={{ color: 'var(--z-fg-muted)', fontSize: 12 }}>
-              Slug: <code>{derivedSlug || '—'}</code>
-            </span>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {error ? (
+              <span style={{ color: 'var(--z-fg-status)', fontSize: 12 }}>{error}</span>
+            ) : (
+              <span style={{ color: 'var(--z-fg-muted)', fontSize: 12 }}>
+                Slug: <code>{derivedSlug || '—'}</code>
+              </span>
+            )}
+            {compileError ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveMode('raw');
+                  setCompileError(null);
+                  setError(null);
+                  setStep('identity');
+                  setInputsText(pretty(compileInputsSchema));
+                  if (compilePreview?.skill.outputsSchema) {
+                    setOutputsText(pretty(compilePreview.skill.outputsSchema));
+                  }
+                }}
+                style={fallbackBtnStyle}
+              >
+                Save without compilation
+              </button>
+            ) : null}
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {step !== 'identity' ? (
-              <button type="button" onClick={() => setStep(step === 'outputs' ? 'inputs' : 'identity')} style={secondaryBtnStyle}>
+              <button type="button" onClick={() => setStep('identity')} style={secondaryBtnStyle}>
                 ← Back
               </button>
             ) : null}
-            {step !== 'outputs' ? (
-              <button
-                type="button"
-                onClick={() => setStep(step === 'identity' ? 'inputs' : 'outputs')}
-                style={primaryBtnStyle}
-                disabled={!title.trim() || !summary.trim()}
-              >
-                Next →
-              </button>
+            {saveMode === 'raw' ? (
+              step !== 'outputs' ? (
+                <button
+                  type="button"
+                  onClick={() => setStep(step === 'identity' ? 'inputs' : 'outputs')}
+                  style={primaryBtnStyle}
+                  disabled={!title.trim() || !summary.trim()}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button type="button" onClick={onSave} style={primaryBtnStyle} disabled={!canSave || busy}>
+                  {busy ? 'Saving…' : 'Save skill'}
+                </button>
+              )
             ) : (
-              <button type="button" onClick={onSave} style={primaryBtnStyle} disabled={!canSave || busy}>
-                {busy ? 'Saving…' : 'Save skill'}
-              </button>
+              step !== 'parameters' ? (
+                <button
+                  type="button"
+                  onClick={() => setStep('parameters')}
+                  style={primaryBtnStyle}
+                  disabled={!title.trim() || !summary.trim()}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button type="button" onClick={onSave} style={primaryBtnStyle} disabled={!canSave || busy}>
+                  {busy ? 'Saving…' : 'Compile & save'}
+                </button>
+              )
             )}
           </div>
         </footer>
@@ -393,6 +524,49 @@ function SchemaStep(props: {
   );
 }
 
+function CompileParametersStep(props: {
+  preview: CompilationResult | null;
+  schema: JsonSchema;
+  onSchemaChange: (schema: JsonSchema) => void;
+}) {
+  if (!props.preview) {
+    return (
+      <p style={{ padding: 20, color: 'var(--z-fg-muted)' }}>
+        No compilation preview available.
+      </p>
+    );
+  }
+
+  const { report } = props.preview;
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <h4 style={{ margin: 0, fontSize: 14 }}>Compilation Preview</h4>
+        <div style={{ fontSize: 12, color: 'var(--z-fg-muted)' }}>
+          <p style={{ margin: '4px 0' }}>
+            Detected {report.parameters.length} parameter(s) • {report.graphStats.nodes} nodes,{' '}
+            {report.graphStats.edges} edges • Estimated cost: {report.estimatedCost}
+          </p>
+          {report.warnings.length > 0 ? (
+            <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+              {report.warnings.map((w) => (
+                <span key={w} style={{ color: 'var(--z-fg-warn, #d97706)' }}>
+                  {w}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div>
+        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Parameters</h4>
+        <ParameterEditor schema={props.schema} onChange={props.onSchemaChange} />
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'grid', gap: 6 }}>
@@ -494,4 +668,32 @@ const linkBtnStyle: CSSProperties = {
   color: 'var(--z-fg-muted)',
   fontSize: 14,
   cursor: 'pointer',
+};
+
+const modeToggleRow: CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  paddingBottom: 4,
+};
+
+const modeToggleStyle = (active: boolean): CSSProperties => ({
+  padding: '6px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--z-section-border)',
+  background: active ? 'var(--z-accent-subtle, rgba(90,140,255,0.15))' : 'transparent',
+  color: active ? 'var(--z-accent, #5a8cff)' : 'var(--z-fg)',
+  fontSize: 13,
+  fontWeight: active ? 600 : 400,
+  cursor: 'pointer',
+});
+
+const fallbackBtnStyle: CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 8,
+  border: '1px solid var(--z-fg-status, #d95a5a)',
+  background: 'transparent',
+  color: 'var(--z-fg-status, #d95a5a)',
+  fontSize: 12,
+  cursor: 'pointer',
+  width: 'fit-content',
 };

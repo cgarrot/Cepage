@@ -177,3 +177,35 @@ export function matchesQuery(skill: UserSkillRow, query: string): boolean {
   ];
   return haystacks.some((h) => typeof h === 'string' && h.toLowerCase().includes(q));
 }
+
+export function isCompiledSkill(skill: UserSkillRow): boolean {
+  return Array.isArray(skill.tags) && skill.tags.includes('compiled');
+}
+
+export function compiledAgentType(skill: UserSkillRow): string | null {
+  if (!isCompiledSkill(skill)) return null;
+  return skill.tags.find((t) => t !== 'compiled') ?? null;
+}
+
+export function agentIcon(agentType: string | null): string {
+  switch (agentType) {
+    case 'opencode':
+      return '◉';
+    case 'cursor':
+      return '⌖';
+    default:
+      return '⚙️';
+  }
+}
+
+export const compiledBadgeStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  padding: '2px 8px',
+  borderRadius: 999,
+  border: '1px solid rgba(217, 119, 6, 0.4)',
+  background: 'rgba(217, 119, 6, 0.1)',
+  color: 'var(--z-fg-status-warn, #d97706)',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+};

@@ -53,6 +53,7 @@ export class OpenapiService {
         { name: 'schedules', description: 'Scheduled skill runs (cron).' },
         { name: 'sessions', description: 'Session authoring and save-as-skill.' },
         { name: 'webhooks', description: 'Outbound HMAC-signed webhook subscriptions.' },
+        { name: 'skill-compiler', description: 'Compile sessions into reusable skills and validate them.' },
       ],
       paths: {
         ...this.coreSkillCatalogPaths(),
@@ -60,6 +61,7 @@ export class OpenapiService {
         ...this.schedulePaths(),
         ...this.authoringPaths(),
         ...this.webhookPaths(),
+        ...this.compilerPaths(),
         ...this.typedSkillPaths(skills),
       },
       components: {
@@ -571,6 +573,60 @@ export class OpenapiService {
     };
   }
 
+  private compilerPaths(): Record<string, unknown> {
+    return {
+      '/skill-compiler/dry-run': {
+        post: {
+          tags: ['skill-compiler'],
+          summary: 'Validate a skill against inputs without executing it.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DryRunBody' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Dry-run report.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/DryRunResult' },
+                },
+              },
+            },
+            '404': { description: 'Skill not found.' },
+          },
+        },
+      },
+      '/skill-compiler/sessions/{sessionId}/preview': {
+        get: {
+          tags: ['skill-compiler'],
+          summary: 'Preview a compilation without persisting.',
+          parameters: [
+            { name: 'sessionId', in: 'path', required: true, schema: { type: 'string' } },
+            {
+              name: 'agentType',
+              in: 'query',
+              schema: { type: 'string', enum: ['opencode', 'cursor'], default: 'opencode' },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Compilation preview.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CompilationPreview' },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
   // ─── typed per-skill paths ───────────────────────────────────────────
 
   private typedSkillPaths(skills: WorkflowSkill[]): Record<string, unknown> {
@@ -926,6 +982,81 @@ export class OpenapiService {
           id: { type: 'string', description: 'Server-generated deliveryId for the ping event.' },
           status: { type: 'string', enum: ['delivered', 'failed'] },
           httpStatus: { type: 'integer', nullable: true },
+        },
+      },
+      DryRunBody: {
+        type: 'object',
+        required: ['skillId', 'inputs'],
+        properties: {
+          skillId: { type: 'string' },
+          inputs: { type: 'object', additionalProperties: true },
+          mode: { type: 'string', enum: ['strict', 'permissive'] },
+        },
+      },
+      DryRunResult: {
+        type: 'object',
+        required: ['overall', 'checks', 'warnings', 'errors', 'estimatedCost'],
+        properties: {
+          overall: { type: 'string', enum: ['PASS', 'FAIL'] },
+          checks: {
+            type: 'object',
+            required: ['parametric', 'schema', 'graph'],
+            properties: {
+              parametric: { type: 'string', enum: ['PASS', 'FAIL'] },
+              schema: { type: 'string', enum: ['PASS', 'FAIL'] },
+              graph: { type: 'string', enum: ['PASS', 'FAIL'] },
+            },
+          },
+          warnings: { type: 'array', items: { type: 'string' } },
+          errors: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['check', 'message'],
+              properties: {
+                check: { type: 'string' },
+                field: { type: 'string', nullable: true },
+                message: { type: 'string' },
+              },
+            },
+          },
+          estimatedCost: { type: 'number' },
+        },
+      },
+      CompilationPreview: {
+        type: 'object',
+        required: ['skill', 'report'],
+        properties: {
+          skill: { type: 'object', additionalProperties: true },
+          report: {
+            type: 'object',
+            required: ['parameters', 'estimatedCost', 'graphStats', 'warnings'],
+            properties: {
+              parameters: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['name', 'occurrences', 'inferredType'],
+                  properties: {
+                    name: { type: 'string' },
+                    occurrences: { type: 'integer' },
+                    inferredType: { type: 'string' },
+                    hint: { type: 'string', nullable: true },
+                  },
+                },
+              },
+              estimatedCost: { type: 'number' },
+              graphStats: {
+                type: 'object',
+                required: ['nodes', 'edges'],
+                properties: {
+                  nodes: { type: 'integer' },
+                  edges: { type: 'integer' },
+                },
+              },
+              warnings: { type: 'array', items: { type: 'string' } },
+            },
+          },
         },
       },
     };

@@ -19,6 +19,7 @@ import { ScheduledSkillRunsModule } from './modules/scheduled-skill-runs/schedul
 import { UserSkillsModule } from './modules/user-skills/user-skills.module';
 import { SkillRunsModule } from './modules/skill-runs/skill-runs.module';
 import { SkillAuthoringModule } from './modules/skill-authoring/skill-authoring.module';
+import { SkillCompilerModule } from './modules/skill-compiler/skill-compiler.module';
 import { OpenapiModule } from './modules/openapi/openapi.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ValidationModule } from './common/validation/validation.module';
@@ -50,6 +51,7 @@ import { ValidationModule } from './common/validation/validation.module';
     UserSkillsModule,
     SkillRunsModule,
     SkillAuthoringModule,
+    SkillCompilerModule,
     OpenapiModule,
     WebhooksModule,
   ],

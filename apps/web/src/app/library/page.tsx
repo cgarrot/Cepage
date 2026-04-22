@@ -6,13 +6,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { deleteUserSkill, listUserSkills, type UserSkillRow } from '@cepage/client-api';
 import { useI18n } from '@cepage/app-ui';
 import {
+  agentIcon,
   btnSolidStyle,
   btnStyle,
+  compiledAgentType,
+  compiledBadgeStyle,
   countInputs,
   countOutputs,
   extractTags,
   fmtDate,
   headerStyle,
+  isCompiledSkill,
   matchesQuery,
   pageStyle,
   sectionStyle,
@@ -26,6 +30,8 @@ import {
 // inputsSchema lets users actually run the skill.
 
 type VisibilityFilter = 'all' | 'private' | 'workspace' | 'public';
+type SourceFilter = 'all' | 'compiled' | 'hand-authored';
+type SortMode = 'updated-desc' | 'recently-compiled';
 
 export default function LibraryPage() {
   const { t, locale } = useI18n();
@@ -38,6 +44,8 @@ export default function LibraryPage() {
   const [category, setCategory] = useState<'all' | string>('all');
   const [kind, setKind] = useState<'all' | string>('all');
   const [visibility, setVisibility] = useState<VisibilityFilter>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [sort, setSort] = useState<SortMode>('updated-desc');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,13 +69,30 @@ export default function LibraryPage() {
   }, [query]);
 
   const filtered = useMemo(() => {
-    return rows.filter((row) => {
+    let result = rows.filter((row) => {
       if (category !== 'all' && row.category !== category) return false;
       if (kind !== 'all' && row.kind !== kind) return false;
       if (visibility !== 'all' && row.visibility !== visibility) return false;
+      if (sourceFilter === 'compiled' && !isCompiledSkill(row)) return false;
+      if (sourceFilter === 'hand-authored' && isCompiledSkill(row)) return false;
       return matchesQuery(row, debouncedQuery);
     });
-  }, [rows, category, kind, visibility, debouncedQuery]);
+
+    if (sort === 'recently-compiled') {
+      result = [...result].sort((a, b) => {
+        const aCompiled = isCompiledSkill(a) ? 1 : 0;
+        const bCompiled = isCompiledSkill(b) ? 1 : 0;
+        if (aCompiled !== bCompiled) return bCompiled - aCompiled;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    } else {
+      result = [...result].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+    }
+
+    return result;
+  }, [rows, category, kind, visibility, sourceFilter, sort, debouncedQuery]);
 
   const categories = useMemo(() => uniqueCategories(rows), [rows]);
   const kinds = useMemo(() => uniqueKinds(rows), [rows]);
@@ -165,9 +190,43 @@ export default function LibraryPage() {
           <option value="workspace">workspace</option>
           <option value="public">public</option>
         </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortMode)}
+          style={selectStyle}
+        >
+          <option value="updated-desc">{t('ui.skillsLibrary.sortUpdated')}</option>
+          <option value="recently-compiled">{t('ui.skillsLibrary.sortRecentlyCompiled')}</option>
+        </select>
         <span style={{ fontSize: 13, color: 'var(--z-fg-muted)' }}>
           {t('ui.skillsLibrary.countBadge', { count: String(filtered.length) })}
         </span>
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 16,
+          alignItems: 'center',
+        }}
+      >
+        <FilterButton
+          label={t('ui.skillsLibrary.filterAll')}
+          active={sourceFilter === 'all'}
+          onClick={() => setSourceFilter('all')}
+        />
+        <FilterButton
+          label={t('ui.skillsLibrary.filterCompiled')}
+          active={sourceFilter === 'compiled'}
+          onClick={() => setSourceFilter('compiled')}
+        />
+        <FilterButton
+          label={t('ui.skillsLibrary.filterHandAuthored')}
+          active={sourceFilter === 'hand-authored'}
+          onClick={() => setSourceFilter('hand-authored')}
+        />
       </div>
 
       {loading ? (
@@ -193,6 +252,8 @@ export default function LibraryPage() {
             const tags = extractTags(row);
             const inputsCount = countInputs(row);
             const outputsCount = countOutputs(row);
+            const compiled = isCompiledSkill(row);
+            const agentType = compiledAgentType(row);
             return (
               <li key={row.id}>
                 <article style={{ ...sectionStyle, display: 'grid', gap: 8 }}>
@@ -219,6 +280,11 @@ export default function LibraryPage() {
                     >
                       {row.title}
                     </button>
+                    {compiled ? (
+                      <span style={compiledBadgeStyle}>
+                        {t('ui.skillsLibrary.compiledBadge')}
+                      </span>
+                    ) : null}
                     {row.deprecated ? (
                       <span
                         style={{
@@ -255,10 +321,45 @@ export default function LibraryPage() {
                     ))}
                     {tags.length > 3 ? <span style={tagStyle}>+{tags.length - 3}</span> : null}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--z-fg-muted)' }}>
-                    {t('ui.skillsLibrary.inputsCount', { count: String(inputsCount) })} ·{' '}
-                    {t('ui.skillsLibrary.outputsCount', { count: String(outputsCount) })}
-                  </div>
+                  {compiled ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 10,
+                        fontSize: 12,
+                        color: 'var(--z-fg-muted)',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title={t('ui.skillsLibrary.compiledFrom', { agent: agentType ?? 'unknown' })}
+                      >
+                        <span style={{ fontSize: 14 }}>{agentIcon(agentType)}</span>
+                        <span style={{ textTransform: 'capitalize' }}>
+                          {agentType ?? 'unknown'}
+                        </span>
+                      </span>
+                      <span>
+                        {t('ui.skillsLibrary.compiledAt', {
+                          date: fmtDate(row.createdAt, locale),
+                        })}
+                      </span>
+                      <span>
+                        {t('ui.skillsLibrary.parametersCount', { count: String(inputsCount) })}
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--z-fg-muted)' }}>
+                      {t('ui.skillsLibrary.inputsCount', { count: String(inputsCount) })} ·{' '}
+                      {t('ui.skillsLibrary.outputsCount', { count: String(outputsCount) })}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: 'var(--z-fg-muted)' }}>
                     {t('ui.skillsLibrary.updated')}: {fmtDate(row.updatedAt, locale)}
                   </div>
@@ -285,6 +386,32 @@ export default function LibraryPage() {
         </ul>
       )}
     </div>
+  );
+}
+
+function FilterButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...btnStyle,
+        borderColor: active ? 'var(--z-btn-solid-border)' : 'var(--z-btn-ghost-border)',
+        background: active ? 'var(--z-btn-solid-bg)' : 'var(--z-btn-ghost-bg)',
+        color: active ? 'var(--z-btn-solid-fg)' : 'var(--z-btn-ghost-fg)',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

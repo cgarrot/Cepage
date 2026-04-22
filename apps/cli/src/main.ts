@@ -2,10 +2,12 @@ import { parseArgs } from 'node:util';
 
 import { skillsCommand } from './commands/skills.js';
 import { runsCommand } from './commands/runs.js';
+import { runCommand } from './commands/run.js';
 import { schedulesCommand } from './commands/schedules.js';
 import { webhooksCommand } from './commands/webhooks.js';
 import { authCommand } from './commands/auth.js';
 import { configCommand } from './commands/config.js';
+import { importCommand } from './commands/import.js';
 import { UsageError } from './errors.js';
 
 const USAGE = `cepage — run and manage your Cepage skills.
@@ -17,6 +19,7 @@ Commands:
   skills list              List available skills (filesystem + user)
   skills get <slug>        Show a skill's schema and metadata
   skills run <slug>        Run a skill. Accepts --input key=value, --inputs-file path
+  run opencode             Run an OpenCode agent. Accepts --prompt, --capture, --auto-compile
   runs list                List recent skill runs
   runs get <id>            Show a run's inputs/outputs/status
   runs cancel <id>         Cancel an in-flight run
@@ -31,9 +34,10 @@ Commands:
   webhooks ping <id>       Send a test delivery (webhook.ping)
   webhooks rotate-secret <id>
                            Rotate the HMAC signing secret
-  auth login               Save API URL + token to ~/.cepage/config.json
-  auth logout              Remove the saved config
-  config                   Print the effective config (tokens are redacted)
+   auth login               Save API URL + token to ~/.cepage/config.json
+   auth logout              Remove the saved config
+   config                   Print the effective config (tokens are redacted)
+   import cursor            Import a Cursor session as a compiled skill
 
 Global options:
   --api-url <url>          Override API base URL (default: http://localhost:31947/api/v1)
@@ -67,6 +71,8 @@ export async function runCli(argv: string[]): Promise<number> {
         return await skillsCommand(rest, globalValues);
       case 'runs':
         return await runsCommand(rest, globalValues);
+      case 'run':
+        return await runCommand(rest, globalValues);
       case 'schedules':
         return await schedulesCommand(rest, globalValues);
       case 'webhooks':
@@ -75,6 +81,8 @@ export async function runCli(argv: string[]): Promise<number> {
         return await authCommand(rest, globalValues);
       case 'config':
         return await configCommand(rest, globalValues);
+      case 'import':
+        return await importCommand(rest, globalValues);
       default:
         process.stderr.write(`cepage: unknown command "${command ?? ''}"\n\n`);
         process.stderr.write(USAGE);

@@ -9,4 +9,5 @@ export * from './scheduled-skill-runs';
 export * from './user-skills';
 export * from './skill-runs';
 export * from './skill-authoring';
+export * from './skill-compiler';
 export * from './webhooks';

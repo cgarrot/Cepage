@@ -6,6 +6,7 @@ export { NewSessionFromSkillDialog } from './NewSessionFromSkillDialog';
 export { CommandPalette } from './CommandPalette';
 export { SaveAsSkillDialog, type SaveAsSkillDialogProps } from './SaveAsSkillDialog';
 export { SchemaAutoForm, type SchemaAutoFormProps } from './SchemaAutoForm';
+export { ParameterEditor, type ParameterEditorProps } from './ParameterEditor';
 export { ThemeProvider } from './ThemeProvider';
 export { WorkspaceShell } from './WorkspaceShell';
 export { formatActivityLine, formatStatusLine } from './formatWorkspace';

@@ -45,6 +45,7 @@ test('runCli with --help prints usage', async () => {
   assert.equal(result, 0);
   assert.ok(stdout.includes('skills list'));
   assert.ok(stdout.includes('auth login'));
+  assert.ok(stdout.includes('run opencode'));
 });
 
 test('runCli with --version prints the version', async () => {

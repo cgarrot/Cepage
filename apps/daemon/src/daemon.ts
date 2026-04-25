@@ -195,9 +195,10 @@ export class Daemon {
   private async sendHeartbeat(): Promise<void> {
     if (!this.running) return;
     try {
-      const catalog = await this.refreshCatalog();
+      const activeJobId = this.state.activeJobId;
+      const catalog = activeJobId ? undefined : await this.refreshCatalog();
       await this.client.heartbeat({
-        activeJobId: this.state.activeJobId,
+        activeJobId,
         load: { supportedAgents: this.config.supportedAgents },
         catalog,
       });

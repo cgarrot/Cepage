@@ -10,7 +10,7 @@ This guide covers the Skill Compiler surface, one of two ways to create skills i
 
 The Skill Compiler turns a one-off agent session into a reusable, typed skill.
 
-After you finish a session with Cursor or OpenCode, you send the session artifacts to Cepage. Cepage extracts the execution graph, replaces concrete values like "Stripe" with typed parameters like `{{payment_provider}}`, runs a dry-run validation, and emits a skill you can call from the CLI, SDK, or MCP server.
+After you finish a session with Cursor, OpenCode, or Claude Code, you send the session artifacts to Cepage. Cepage extracts the execution graph, replaces concrete values like "Stripe" with typed parameters like `{{payment_provider}}`, runs a dry-run validation, and emits a skill you can call from the CLI, SDK, or MCP server.
 
 **The five phases:**
 
@@ -58,6 +58,23 @@ cepage run opencode --capture --draft --prompt "Scaffold a REST API"
 
 When the session ends, Cepage stores the graph and proposes compilable patterns.
 
+### Capture a Claude Code Session
+
+Claude Code support has two parts:
+
+1. The native daemon can spawn Claude Code runs when the `claude` CLI is installed.
+2. The CLI can install a post-session hook that packages finished Claude Code sessions and sends them to the Skill Compiler.
+
+```bash
+# Install the hook
+cepage hook install claude-code
+
+# Remove it later if needed
+cepage hook install --uninstall claude-code
+```
+
+The hook is written to `~/.claude/hooks/cepage-compile.sh`. It uses the configured Cepage API URL, or `CEPAGE_API_URL` when set, and sends the session as a compile request after Claude Code finishes.
+
 ---
 
 ## Review and Edit Parameters
@@ -93,6 +110,9 @@ cepage skills dry-run <skill-slug>
 cepage skills dry-run payment-integration \
   --input payment_provider=paypal \
   --input api_base_url=https://api.paypal.com
+
+# Fail on warnings as well as hard errors
+cepage skills dry-run payment-integration --mode strict
 ```
 
 **What the dry-run checks:**
@@ -146,6 +166,8 @@ const run = await cepage.skills.run('payment-integration', {
 console.log(run.outputs);
 ```
 
+For generated catalog types, run `pnpm --filter @cepage/sdk generate` against `GET /api/v1/openapi.json` or a cached spec. This emits the dynamic per-skill schemas under `packages/sdk/src/generated/` without replacing the hand-written HTTP client.
+
 ### From the Python SDK
 
 ```python
@@ -161,6 +183,8 @@ with CepageClient(api_url="http://localhost:31947/api/v1") as cepage:
     )
     print(run.outputs)
 ```
+
+For Python generated dataclasses, run `python packages/sdk-python/scripts/generate-python-sdk-types.py`. The generated module is local build output and is intentionally ignored by git.
 
 ### From an MCP Client
 
@@ -218,11 +242,9 @@ Result: PASS. Structural checks pass. Parametric coverage: 3/3 required fields.
 
 **Step 4: Publish and reuse**
 
-```bash
-# Publish the skill
-cepage skills publish payment-integration
+Publish from the compilation review page, then run it from the CLI:
 
-# Later, run it for PayPal
+```bash
 cepage skills run payment-integration \
   --input payment_provider=paypal \
   --input api_key=YOUR_PAYPAL_KEY \
@@ -258,9 +280,9 @@ cepage skills dry-run api-client-generator \
   --input openapi_spec_url=https://petstore.swagger.io/v2/swagger.json \
   --input language=typescript \
   --input output_dir=./src/client
-
-cepage skills publish api-client-generator
 ```
+
+If the report passes, publish from the compilation review page.
 
 **Step 4: Reuse**
 
@@ -286,7 +308,6 @@ cepage skills run api-client-generator \
 
 ## Next Steps
 
-- **Read the full pivot document:** [`docs/product-plan/11-harness-layer-pivot.md`](product-plan/11-harness-layer-pivot.md)
 - **Explore the Studio canvas:** Save workflows visually with human-in-the-loop approval nodes. See the [Skill Library](../README.md#skill-library) section in the main README.
 - **Browse the workflow catalog:** [`docs/workflow-prompt-library/`](workflow-prompt-library/)
 - **Check the API reference:** [`docs/07-API-CONTRACTS.md`](07-API-CONTRACTS.md)
@@ -307,6 +328,10 @@ cepage import cursor --latest --cursor-data-dir /path/to/cursor/data
 
 The SSE stream may have been interrupted. Try re-running with `--capture` again. If the session graph is incomplete, you can still save it as a raw skill without compilation and add parameters manually on the Studio canvas.
 
+**"claude CLI not found in PATH" when installing the hook**
+
+Install Claude Code and make sure `claude` is available in the shell that runs `cepage hook install claude-code`. If you use a wrapper or custom binary path for daemon runs, set `CLAUDE_BIN`.
+
 **Dry-run fails with "missing required parameter"**
 
 Check the JSON Schema in the review page. Mark the field as optional with a default, or provide it during the dry-run with `--input key=value`.
@@ -317,4 +342,4 @@ Skills are identified by slug. Use `cepage skills list` to see available skills.
 
 ---
 
-*Last updated: 2026-04-22*
+*Last updated: 2026-04-25*

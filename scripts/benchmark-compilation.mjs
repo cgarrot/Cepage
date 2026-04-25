@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,8 @@ const require = createRequire(import.meta.url);
 const { CompilerService } = require('../packages/api/dist/modules/skill-compiler/compiler/compiler.service.js');
 const { OpencodeExtractorService } = require('../packages/api/dist/modules/skill-compiler/extractors/opencode-extractor.service.js');
 const { CursorExtractorService } = require('../packages/api/dist/modules/skill-compiler/extractors/cursor-extractor.service.js');
+const { ClaudeCodeExtractorService } = require('../packages/api/dist/modules/skill-compiler/extractors/claude-code-extractor.service.js');
+const { SessionExtractorService } = require('../packages/api/dist/modules/skill-compiler/session-extractor.service.js');
 const { GraphMapperService } = require('../packages/api/dist/modules/skill-compiler/graph-mapper.service.js');
 const { ParametrizerService } = require('../packages/api/dist/modules/skill-compiler/parametrizer/parametrizer.service.js');
 const { SchemaInferenceService } = require('../packages/api/dist/modules/skill-compiler/schema-inference/schema-inference.service.js');
@@ -37,16 +39,21 @@ const events = [
   {
     type: 'file_edit',
     path: '/tmp/test.txt',
-    operation: 'edit',
+    operation: 'write',
     content: 'Hello PayPal',
     callId: 'tool-2',
   },
   { type: 'message_stop', stopReason: 'end_turn' },
 ];
 
-const compiler = new CompilerService(
+const sessionExtractor = new SessionExtractorService(
   new OpencodeExtractorService(),
   new CursorExtractorService(),
+  new ClaudeCodeExtractorService(),
+);
+
+const compiler = new CompilerService(
+  sessionExtractor,
   new GraphMapperService(),
   new ParametrizerService(),
   new SchemaInferenceService(),

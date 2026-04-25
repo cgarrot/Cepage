@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import * as tar from 'tar';
 import { NotFoundException } from '@nestjs/common';
 import type { UserSkillRow } from '../../user-skills/user-skills.dto';
 import type { DryRunResult } from '../dry-run/dry-run.service';
 import type { CompilationResult } from '../compiler/compiler.service';
+import { SessionArchiveService } from '../session-archive.service.js';
 import { SkillCompilerController } from '../skill-compiler.controller.js';
 
 function createController(overrides?: {
   dryRun?: Pick<import('../dry-run/dry-run.service.js').DryRunService, 'validate'>;
   compiler?: Pick<import('../compiler/compiler.service.js').CompilerService, 'compile'>;
   userSkills?: Pick<import('../../user-skills/user-skills.service.js').UserSkillsService, 'getBySlug'>;
+  sessionArchive?: Pick<SessionArchiveService, 'prepareClaudeCodeArchive'>;
 }) {
   const dryRunService = overrides?.dryRun ?? {
     validate: (): DryRunResult => ({
@@ -66,6 +72,7 @@ function createController(overrides?: {
     compilerService as never,
     dryRunService as never,
     userSkillsService as never,
+    (overrides?.sessionArchive ?? new SessionArchiveService()) as never,
   );
 }
 
@@ -131,7 +138,7 @@ test('preview calls compiler with opencode and draft mode by default', async () 
   assert.equal(capturedArgs?.mode, 'draft');
 });
 
-test('preview passes cursor agentType when provided', async () => {
+test('preview passes cursor_agent agentType when provided', async () => {
   let capturedArgs: Record<string, unknown> | undefined;
   const controller = createController({
     compiler: {
@@ -150,8 +157,73 @@ test('preview passes cursor agentType when provided', async () => {
     },
   });
 
-  await controller.preview('sess-456', { agentType: 'cursor' });
+  await controller.preview('sess-456', { agentType: 'cursor_agent' });
 
-  assert.equal(capturedArgs?.agentType, 'cursor');
+  assert.equal(capturedArgs?.agentType, 'cursor_agent');
   assert.equal(capturedArgs?.mode, 'draft');
+});
+
+test('compile accepts a Claude Code session archive upload', async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), 'compiler-controller-'));
+  try {
+    const sessionDir = join(tempDir, 'session');
+    await mkdir(sessionDir);
+    await writeFile(
+      join(sessionDir, 'transcript.jsonl'),
+      [
+        JSON.stringify({
+          type: 'user',
+          message: { role: 'user', content: 'Build the billing report' },
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Report ready' }] },
+        }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const archivePath = join(tempDir, 'session.tar.gz');
+    await tar.c({ gzip: true, cwd: tempDir, file: archivePath }, ['session']);
+    const buffer = await readFile(archivePath);
+
+    let capturedArgs: Record<string, unknown> | undefined;
+    let normalizedFixture: { events?: unknown[] } | undefined;
+    const controller = createController({
+      compiler: {
+        async compile(args) {
+          capturedArgs = args as unknown as Record<string, unknown>;
+          normalizedFixture = JSON.parse(
+            await readFile(String(capturedArgs.sessionData), 'utf8'),
+          ) as { events?: unknown[] };
+          return {
+            skill: { slug: 'billing-report' },
+            report: {
+              parameters: [],
+              estimatedCost: 0,
+              graphStats: { nodes: 2, edges: 1 },
+              warnings: [],
+            },
+          };
+        },
+      },
+    });
+
+    const result = await controller.compile(
+      {
+        sessionId: 'sess-claude-1',
+        agentType: 'claude_code',
+        mode: 'publish',
+      },
+      { originalname: 'session.tar.gz', buffer, size: buffer.length },
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(capturedArgs?.sessionId, 'sess-claude-1');
+    assert.equal(capturedArgs?.agentType, 'claude_code');
+    assert.equal(capturedArgs?.mode, 'publish');
+    assert.equal(normalizedFixture?.events?.length, 2);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 });

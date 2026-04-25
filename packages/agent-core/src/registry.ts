@@ -6,12 +6,14 @@ import type {
   AgentType,
 } from '@cepage/shared-core';
 import type { AgentAdapter, AgentCatalogConfig, AgentLaunchConfig } from './adapter.js';
+import { listClaudeCodeCatalog, runClaudeCodeStream } from './claude-code.js';
 import { listCursorAgentCatalog, runCursorAgentStream } from './cursor-agent.js';
 import { listOpenCodeCatalog, runOpenCodeStream } from './opencode-run.js';
 
 function adapterOrder(type: AgentType): number {
   if (type === 'opencode') return 0;
   if (type === 'cursor_agent') return 1;
+  if (type === 'claude_code') return 2;
   return 9;
 }
 
@@ -105,6 +107,28 @@ const ADAPTERS: AgentAdapter[] = [
         throw new Error('AGENT_ADAPTER_MULTIMODAL_UNSUPPORTED:cursor_agent');
       }
       return runCursorAgentStream({
+        workingDirectory: config.workingDirectory,
+        promptText: config.promptText,
+        model: config.model,
+        signal: config.signal,
+      });
+    },
+  },
+  {
+    type: 'claude_code',
+    label: 'Claude Code',
+    async discoverCatalog(config) {
+      return {
+        type: 'claude_code',
+        label: 'Claude Code',
+        catalog: await listClaudeCodeCatalog({
+          workingDirectory: config.workingDirectory,
+          signal: config.signal,
+        }),
+      };
+    },
+    run(config) {
+      return runClaudeCodeStream({
         workingDirectory: config.workingDirectory,
         promptText: config.promptText,
         model: config.model,

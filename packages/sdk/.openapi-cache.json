@@ -1,0 +1,5104 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cepage",
+    "version": "0.1.0",
+    "description": "HTTP API exposing the Cepage typed-skill library: list catalog, run skills, manage schedules, and author new skills from sessions."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Relative path under the Cepage HTTP server."
+    }
+  ],
+  "tags": [
+    {
+      "name": "skills",
+      "description": "Skill catalog and per-skill runs."
+    },
+    {
+      "name": "skill-runs",
+      "description": "Skill run records and SSE stream."
+    },
+    {
+      "name": "schedules",
+      "description": "Scheduled skill runs (cron)."
+    },
+    {
+      "name": "sessions",
+      "description": "Session authoring and save-as-skill."
+    },
+    {
+      "name": "webhooks",
+      "description": "Outbound HMAC-signed webhook subscriptions."
+    },
+    {
+      "name": "skill-compiler",
+      "description": "Compile sessions into reusable skills and validate them."
+    }
+  ],
+  "paths": {
+    "/workflow-skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List all skills (filesystem + DB merged).",
+        "responses": {
+          "200": {
+            "description": "Catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WorkflowSkill"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "skills": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/WorkflowSkill"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workflow-skills/{slug}": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Fetch a single skill by slug.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSkill"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Skill not found."
+          }
+        }
+      }
+    },
+    "/skills": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "List DB-backed user skills only.",
+        "responses": {
+          "200": {
+            "description": "User skills.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSkill"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Create a user skill directly (advanced).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserSkillBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSkill"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/{slug}": {
+      "get": {
+        "tags": [
+          "skills"
+        ],
+        "summary": "Fetch a user skill by slug.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User skill.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSkill"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skill-runs": {
+      "get": {
+        "tags": [
+          "skill-runs"
+        ],
+        "summary": "List skill runs.",
+        "parameters": [
+          {
+            "name": "skillId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkillRun"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skill-runs/{runId}": {
+      "get": {
+        "tags": [
+          "skill-runs"
+        ],
+        "summary": "Fetch a skill run by id.",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skill-runs/{runId}/cancel": {
+      "post": {
+        "tags": [
+          "skill-runs"
+        ],
+        "summary": "Cancel a queued or running skill run.",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skill-runs/{runId}/stream": {
+      "get": {
+        "tags": [
+          "skill-runs"
+        ],
+        "summary": "SSE stream of lifecycle events for a run.",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/event-stream — events: snapshot, started, progress, succeeded, failed, cancelled.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scheduled-skill-runs": {
+      "get": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "List scheduled skill runs.",
+        "responses": {
+          "200": {
+            "description": "Schedules.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ScheduledSkillRun"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "Create a scheduled skill run.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduledSkillRunBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledSkillRun"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scheduled-skill-runs/{id}": {
+      "get": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "Fetch a schedule by id.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledSkillRun"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "Update a schedule.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Partial schedule update."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledSkillRun"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "Delete a schedule.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted."
+          }
+        }
+      }
+    },
+    "/scheduled-skill-runs/{id}/run-now": {
+      "post": {
+        "tags": [
+          "schedules"
+        ],
+        "summary": "Fire a schedule immediately.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run scaffolded."
+          }
+        }
+      }
+    },
+    "/sessions/{id}/detect-inputs": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Infer a JSON Schema from a session's prompt nodes.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detection result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectInputsResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/save-as-skill": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Persist a session as a reusable user skill.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAsSkillBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created user skill.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSkill"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "List webhook subscriptions (secrets redacted).",
+        "responses": {
+          "200": {
+            "description": "Subscriptions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Webhook"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Create a webhook subscription. Returns the plaintext secret exactly once.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Subscription (with `secret` revealed one time).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookWithSecret"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}": {
+      "get": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Fetch a webhook subscription by id.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Update a webhook subscription (supports secret rotation).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWebhookBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated subscription. The `secret` field is only present when `secretAction=rotate` was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookWithSecret"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Delete a webhook subscription.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted."
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/ping": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Fire a `webhook.ping` event synchronously to validate the subscription.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delivery outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookPingResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webhooks/{id}/rotate-secret": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Rotate the subscription secret. The new plaintext value is returned exactly once.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription with the new `secret`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookWithSecret"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skill-compiler/dry-run": {
+      "post": {
+        "tags": [
+          "skill-compiler"
+        ],
+        "summary": "Validate a skill against inputs without executing it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DryRunBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Skill not found."
+          }
+        }
+      }
+    },
+    "/skill-compiler/sessions/{sessionId}/preview": {
+      "get": {
+        "tags": [
+          "skill-compiler"
+        ],
+        "summary": "Preview a compilation without persisting.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "opencode",
+                "cursor"
+              ],
+              "default": "opencode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compilation preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompilationPreview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/music-creation-modular-architect/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_musicCreationModularArchitect",
+        "summary": "Music Creation Modular Architect — Turn music analyses, artistic intent, and tooling docs into a modular workflow that can generate music artifacts autonomously.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/MusicCreationModularArchitectInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/MusicCreationModularArchitectOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/music-mp3-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_musicMp3CleanReturn",
+        "summary": "Music MP3 Clean Return — Create a managed flow that analyzes music inputs, refines candidates, uses connector targets, and publishes one stable MP3 package.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/MusicMp3CleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/MusicMp3CleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-daily-drop/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouDailyDrop",
+        "summary": "Kangourou Daily Drop (v2 — MJ + Shorts) — Generate one Kangourou Records drop end to end with Midjourney covers, Shorts, and two public YouTube uploads.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouDailyDropInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouDailyDropOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-daily-drop-mvp/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouDailyDropMvp",
+        "summary": "Kangourou Daily Drop (MVP) — Generate one Kangourou Records drop end to end with zero approval and no Midjourney stage.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouDailyDropMvpInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouDailyDropMvpOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/necklace-photo-etsy-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_necklacePhotoEtsyCleanReturn",
+        "summary": "Necklace Photo To Etsy Catalog With Clean Return — Turn a folder of necklace photos into grouped product listings, a stable Etsy-ready catalog, and final verification.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NecklacePhotoEtsyCleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NecklacePhotoEtsyCleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-pick-persona-and-brief/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouPickPersonaAndBrief",
+        "summary": "Kangourou Pick Persona And Brief — Sub-prompt for selecting one persona and writing the song brief with anti-repetition awareness.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouPickPersonaAndBriefInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouPickPersonaAndBriefOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-write-lyrics/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouWriteLyrics",
+        "summary": "Kangourou Write Lyrics — Sub-prompt for producing final bracketed lyrics and the MiniMax music payload.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouWriteLyricsInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouWriteLyricsOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-yt-metadata/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouYtMetadata",
+        "summary": "Kangourou YouTube Metadata And Upload Spec — Sub-prompt for producing YouTube metadata files and upload specs for Kangourou workflows.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouYtMetadataInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouYtMetadataOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/kangourou-mj-prompts/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_kangourouMjPrompts",
+        "summary": "Kangourou Midjourney Prompts (Cover + Short) — Sub-prompt for producing the Midjourney pipeline specs consumed by Kangourou v2.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/KangourouMjPromptsInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/KangourouMjPromptsOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/necklace-photo-celiastuudio-brand-brief/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_necklacePhotoCeliastuudioBrandBrief",
+        "summary": "Celiastuudio Brand Brief — Brand voice, vocabulary, and editorial rules used as source-of-truth context for autonomous reruns.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NecklacePhotoCeliastuudioBrandBriefInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NecklacePhotoCeliastuudioBrandBriefOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/necklace-photo-etsy-listing-rules/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_necklacePhotoEtsyListingRules",
+        "summary": "Etsy Listing Rules — Customer-facing output rules and listing constraints for the necklace photo workflow.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NecklacePhotoEtsyListingRulesInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NecklacePhotoEtsyListingRulesOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/necklace-photo-material-stock-reference/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_necklacePhotoMaterialStockReference",
+        "summary": "Material Stock Reference — Operational stock and material reference used for safe material assignment in the necklace photo workflow.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NecklacePhotoMaterialStockReferenceInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NecklacePhotoMaterialStockReferenceOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/necklace-photo-task-brief/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_necklacePhotoTaskBrief",
+        "summary": "Necklace Photo Task Brief — Task scope and grouping brief for the necklace photo workflow family.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NecklacePhotoTaskBriefInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NecklacePhotoTaskBriefOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/test-session/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_testSession",
+        "summary": "Test Session — Compiled from opencode session \"Test Session\". Graph contains 3 nodes, 3 edges, and 4 detected parameters.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/TestSessionInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/TestSessionOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/cursor-session-002/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_cursorSession002",
+        "summary": "cursor-session-002 — Compiled from cursor session \"cursor-session-002\". Graph contains 4 nodes, 3 edges, and 4 detected parameters.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/CursorSession002Inputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/CursorSession002Outputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/stripe-weekly-report/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_stripeWeeklyReport",
+        "summary": "Stripe Weekly Report — Compiled from opencode session \"Stripe Weekly Report\". Graph contains 5 nodes, 5 edges, and 5 detected parameters.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/StripeWeeklyReportInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/StripeWeeklyReportOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/documentation-pack-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_documentationPackCleanReturn",
+        "summary": "Documentation Pack With Clean Return — Build a reusable documentation or research pack with stable published outputs and final verification.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/DocumentationPackCleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/DocumentationPackCleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/three-js-vanilla-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_threeJsVanillaCleanReturn",
+        "summary": "Three.js Vanilla Documentation Pack (Validated) — Generate a validated Three.js vanilla context pack with clean published docs and a verify marker.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/ThreeJsVanillaCleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/ThreeJsVanillaCleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/app-builder-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_appBuilderCleanReturn",
+        "summary": "App Builder With Clean Return — Turn a product brief into a runnable app or feature with a clean final workspace handoff.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/AppBuilderCleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/AppBuilderCleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/game-dev-managed-flow-clean-return/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_gameDevManagedFlowCleanReturn",
+        "summary": "Game Dev Managed Flow With Clean Return — Drive game-development work from source docs through roadmap, slices, implementation loops, and publish/verify.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/GameDevManagedFlowCleanReturnInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/GameDevManagedFlowCleanReturnOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/analysis-pipeline-modular-architect/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_analysisPipelineModularArchitect",
+        "summary": "Analysis Pipeline Modular Architect — Turn existing analyses into a modular multi-agent workflow that deepens, synthesizes, and generates new data.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/AnalysisPipelineModularArchitectInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/AnalysisPipelineModularArchitectOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/workflow-generator-publish/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_workflowGeneratorPublish",
+        "summary": "Workflow Generator And Publisher — Generate, lint, publish, and verify a reusable workflow artifact.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/WorkflowGeneratorPublishInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/WorkflowGeneratorPublishOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/workflow-api-operator/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_workflowApiOperator",
+        "summary": "Workflow API Operator — Operator runbook for creating sessions, configuring workspaces, generating workflows, running them, and validating published outputs via the API.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/WorkflowApiOperatorInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/WorkflowApiOperatorOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/hello-world-workflow/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_helloWorldWorkflow",
+        "summary": "Hello World Workflow — Create a minimal single-node workflow that proves the end-to-end flow with one stable output file.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/HelloWorldWorkflowInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/HelloWorldWorkflowOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/rest-api-pipeline/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_restApiPipeline",
+        "summary": "REST API Pipeline — Coordinate API requests, transform responses, and publish a stable result bundle with explicit validation.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/RestApiPipelineInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/RestApiPipelineOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/scheduled-report-generator/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_scheduledReportGenerator",
+        "summary": "Scheduled Report Generator — Collect recurring inputs, generate a report, and publish a stable summary package on a repeated cadence.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/ScheduledReportGeneratorInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/ScheduledReportGeneratorOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/file-organizer/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_fileOrganizer",
+        "summary": "File Organizer — Sort, classify, and publish a stable manifest for a messy directory of files.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/FileOrganizerInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/FileOrganizerOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills/notification-dispatcher/runs": {
+      "post": {
+        "tags": [
+          "skills"
+        ],
+        "operationId": "run_notificationDispatcher",
+        "summary": "Notification Dispatcher — Fan out one event or briefing across multiple channels while keeping a stable dispatch manifest and verification output.",
+        "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            },
+            "description": "Block until the run completes."
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 1800000
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "inputs"
+                ],
+                "properties": {
+                  "inputs": {
+                    "$ref": "#/components/schemas/NotificationDispatcherInputs"
+                  },
+                  "idempotencyKey": {
+                    "type": "string"
+                  },
+                  "correlationId": {
+                    "type": "string"
+                  },
+                  "triggeredBy": {
+                    "type": "string",
+                    "enum": [
+                      "api",
+                      "ui",
+                      "cli",
+                      "mcp",
+                      "schedule",
+                      "webhook",
+                      "sdk"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skill run record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillRun"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outputs": {
+                          "oneOf": [
+                            {
+                              "$ref": "#/components/schemas/NotificationDispatcherOutputs"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRunValidationFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WorkflowSkill": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "summary",
+          "version",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "outputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "execution": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        }
+      },
+      "UserSkill": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "summary",
+          "inputsSchema",
+          "outputsSchema"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "outputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "kind": {
+            "type": "string"
+          },
+          "promptText": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceSessionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "workspace",
+              "public"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateUserSkillBody": {
+        "type": "object",
+        "required": [
+          "title",
+          "summary",
+          "inputsSchema",
+          "outputsSchema"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputsSchema": {
+            "type": "object"
+          },
+          "outputsSchema": {
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "promptText": {
+            "type": "string"
+          },
+          "sourceSessionId": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "workspace",
+              "public"
+            ]
+          }
+        }
+      },
+      "SkillRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "skillId",
+          "status",
+          "inputs",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "skillVersion": {
+            "type": "string"
+          },
+          "skillKind": {
+            "type": "string"
+          },
+          "userSkillId": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "outputs": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "error": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SkillRunError"
+              }
+            ]
+          },
+          "sessionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "triggeredBy": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "integer",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SkillRunError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {}
+        }
+      },
+      "SkillRunValidationFailure": {
+        "type": "object",
+        "required": [
+          "code",
+          "errors"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_INPUT"
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "message"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "keyword": {
+                  "type": "string"
+                },
+                "params": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "ScheduledSkillRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "skillId",
+          "cron",
+          "request",
+          "status",
+          "nextRunAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused"
+            ]
+          },
+          "nextRunAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastRunAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastSessionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateScheduledSkillRunBody": {
+        "type": "object",
+        "required": [
+          "skillId",
+          "cron",
+          "request"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        }
+      },
+      "DetectInputsResult": {
+        "type": "object",
+        "required": [
+          "sessionId",
+          "detected",
+          "inputsSchema",
+          "outputsSchema"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "detected": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "occurrences",
+                "inferredType"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "occurrences": {
+                  "type": "integer"
+                },
+                "inferredType": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "inputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "outputsSchema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "promptText": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SaveAsSkillBody": {
+        "type": "object",
+        "required": [
+          "title",
+          "summary"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputsSchema": {
+            "type": "object"
+          },
+          "outputsSchema": {
+            "type": "object"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "workspace",
+              "public"
+            ]
+          }
+        }
+      },
+      "Webhook": {
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "events",
+          "active",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "One of: skill-run.started, skill-run.succeeded, skill-run.failed, skill-run.cancelled, skill-run.progress, webhook.ping, or \"*\" for all."
+            }
+          },
+          "skillId": {
+            "type": "string",
+            "nullable": true
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookWithSecret": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Webhook"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "secret": {
+                "type": "string",
+                "description": "Plaintext HMAC secret. Surfaced exactly once on `create` or when `secretAction=rotate` is passed to `PATCH`."
+              }
+            }
+          }
+        ]
+      },
+      "CreateWebhookBody": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 8
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skillId": {
+            "type": "string",
+            "nullable": true
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateWebhookBody": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skillId": {
+            "type": "string",
+            "nullable": true
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "secretAction": {
+            "type": "string",
+            "enum": [
+              "rotate",
+              "keep"
+            ]
+          }
+        }
+      },
+      "WebhookPingResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Server-generated deliveryId for the ping event."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "delivered",
+              "failed"
+            ]
+          },
+          "httpStatus": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "DryRunBody": {
+        "type": "object",
+        "required": [
+          "skillId",
+          "inputs"
+        ],
+        "properties": {
+          "skillId": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "permissive"
+            ]
+          }
+        }
+      },
+      "DryRunResult": {
+        "type": "object",
+        "required": [
+          "overall",
+          "checks",
+          "warnings",
+          "errors",
+          "estimatedCost"
+        ],
+        "properties": {
+          "overall": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "checks": {
+            "type": "object",
+            "required": [
+              "parametric",
+              "schema",
+              "graph"
+            ],
+            "properties": {
+              "parametric": {
+                "type": "string",
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              },
+              "schema": {
+                "type": "string",
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              },
+              "graph": {
+                "type": "string",
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "check",
+                "message"
+              ],
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "estimatedCost": {
+            "type": "number"
+          }
+        }
+      },
+      "CompilationPreview": {
+        "type": "object",
+        "required": [
+          "skill",
+          "report"
+        ],
+        "properties": {
+          "skill": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "report": {
+            "type": "object",
+            "required": [
+              "parameters",
+              "estimatedCost",
+              "graphStats",
+              "warnings"
+            ],
+            "properties": {
+              "parameters": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "occurrences",
+                    "inferredType"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "occurrences": {
+                      "type": "integer"
+                    },
+                    "inferredType": {
+                      "type": "string"
+                    },
+                    "hint": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              },
+              "estimatedCost": {
+                "type": "number"
+              },
+              "graphStats": {
+                "type": "object",
+                "required": [
+                  "nodes",
+                  "edges"
+                ],
+                "properties": {
+                  "nodes": {
+                    "type": "integer"
+                  },
+                  "edges": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MusicCreationModularArchitectInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "MusicCreationModularArchitectOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "MusicMp3CleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "MusicMp3CleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouDailyDropInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouDailyDropOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouDailyDropMvpInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouDailyDropMvpOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoEtsyCleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoEtsyCleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouPickPersonaAndBriefInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouPickPersonaAndBriefOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouWriteLyricsInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouWriteLyricsOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouYtMetadataInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouYtMetadataOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouMjPromptsInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "KangourouMjPromptsOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoCeliastuudioBrandBriefInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoCeliastuudioBrandBriefOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoEtsyListingRulesInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoEtsyListingRulesOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoMaterialStockReferenceInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoMaterialStockReferenceOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoTaskBriefInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NecklacePhotoTaskBriefOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "TestSessionInputs": {
+        "type": "object",
+        "properties": {
+          "git_provider": {
+            "type": "string",
+            "default": "PayPal"
+          },
+          "stripe_api_key": {
+            "type": "string",
+            "default": "",
+            "format": "password",
+            "writeOnly": true
+          },
+          "new_custom_param": {
+            "type": "string",
+            "default": "hello"
+          }
+        },
+        "required": [
+          "git_provider",
+          "stripe_api_key",
+          "new_custom_param"
+        ],
+        "additionalProperties": false
+      },
+      "TestSessionOutputs": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "workflow_transfer",
+              "copilot",
+              "empty"
+            ],
+            "description": "Execution mode taken by the session bootstrapper."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "ID of the session spawned to execute the skill."
+          }
+        },
+        "required": [
+          "sessionId",
+          "mode"
+        ]
+      },
+      "CursorSession002Inputs": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "/stripe.ts"
+          },
+          "stripe_api_key": {
+            "type": "string",
+            "default": "",
+            "format": "password",
+            "writeOnly": true
+          },
+          "stripe_api_url": {
+            "type": "string",
+            "default": "https://api.stripe.com/v1\\",
+            "format": "uri"
+          },
+          "payment_provider": {
+            "type": "string",
+            "default": "Stripe"
+          }
+        },
+        "required": [
+          "payment_provider",
+          "stripe_api_key",
+          "path",
+          "stripe_api_url"
+        ],
+        "additionalProperties": false
+      },
+      "CursorSession002Outputs": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "workflow_transfer",
+              "copilot",
+              "empty"
+            ],
+            "description": "Execution mode taken by the session bootstrapper."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "ID of the session spawned to execute the skill."
+          }
+        },
+        "required": [
+          "sessionId",
+          "mode"
+        ]
+      },
+      "StripeWeeklyReportInputs": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "/report.ts"
+          },
+          "git_provider": {
+            "type": "string",
+            "default": "Stripe"
+          },
+          "email_address": {
+            "type": "string",
+            "default": "finance@example.com",
+            "format": "email"
+          },
+          "stripe_api_key": {
+            "type": "string",
+            "default": "",
+            "format": "password",
+            "writeOnly": true
+          },
+          "stripe_api_url": {
+            "type": "string",
+            "default": "https://api.stripe.com/v1",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "email_address",
+          "git_provider",
+          "path",
+          "stripe_api_key",
+          "stripe_api_url"
+        ],
+        "additionalProperties": false
+      },
+      "StripeWeeklyReportOutputs": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "workflow_transfer",
+              "copilot",
+              "empty"
+            ],
+            "description": "Execution mode taken by the session bootstrapper."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "ID of the session spawned to execute the skill."
+          }
+        },
+        "required": [
+          "sessionId",
+          "mode"
+        ]
+      },
+      "DocumentationPackCleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "DocumentationPackCleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "ThreeJsVanillaCleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "ThreeJsVanillaCleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "AppBuilderCleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "AppBuilderCleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "GameDevManagedFlowCleanReturnInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "GameDevManagedFlowCleanReturnOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "AnalysisPipelineModularArchitectInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "AnalysisPipelineModularArchitectOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "WorkflowGeneratorPublishInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "WorkflowGeneratorPublishOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "WorkflowApiOperatorInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "WorkflowApiOperatorOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "HelloWorldWorkflowInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "HelloWorldWorkflowOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "RestApiPipelineInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "RestApiPipelineOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "ScheduledReportGeneratorInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "ScheduledReportGeneratorOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "FileOrganizerInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "FileOrganizerOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NotificationDispatcherInputs": {
+        "type": "object",
+        "description": "No typed inputs declared for this skill.",
+        "additionalProperties": true
+      },
+      "NotificationDispatcherOutputs": {
+        "type": "object",
+        "description": "No typed outputs declared for this skill.",
+        "additionalProperties": true
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Optional for now. In Phase 3 the `local-user` shim is retired and a real Bearer token is required."
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {}
+  ]
+}

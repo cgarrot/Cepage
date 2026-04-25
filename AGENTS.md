@@ -7,9 +7,9 @@ pnpm + Turborepo monorepo (`apps/*`, `packages/*`). Node ≥ 20.9, pnpm 9.x, Pos
 - NestJS bootstrap: `apps/api` (package `@cepage/api-app`, entry `src/main.ts`). Control plane only — it no longer spawns any agent CLI or OpenCode server. Keep it minimal; all business logic lives in `packages/api`.
 - Native daemon: `apps/daemon` (package `@cepage/daemon-app`, entry `src/index.ts`). Runs on the host, polls the API on localhost, consumes only `agent_run` + `runtime_*`.
 - CLI: `apps/cli` (package `@cepage/cli`, bin `cepage`). Thin wrapper around `@cepage/sdk` for listing, running, and scheduling skills from the terminal. Config lives at `~/.cepage/config.json`; env overrides are `CEPAGE_API_URL` and `CEPAGE_TOKEN`.
-- Nest API: modules under `packages/api/src/modules/*` — `activity`, `agents`, `collaboration`, `connectors`, `execution`, `graph`, `runtime`, `sessions`, `workflow-copilot`, `workflow-skills`, `user-skills`, `skill-runs`, `skill-authoring`, `scheduled-skill-runs`, `openapi`. The typed-skill library (`docs/product-plan/03-typed-skill-contract.md`) flows through the four save/run/schedule modules; `openapi` generates the dynamic OpenAPI 3.1 document (`GET /api/v1/openapi.json`) that powers the TypeScript SDK (`packages/sdk`), Python SDK (`packages/sdk-python`), and MCP server (`packages/mcp`).
+- Nest API: modules under `packages/api/src/modules/*` — `activity`, `agents`, `collaboration`, `connectors`, `execution`, `graph`, `runtime`, `sessions`, `workflow-copilot`, `workflow-skills`, `user-skills`, `skill-runs`, `skill-authoring`, `skill-compiler`, `skill-mining`, `session-analysis`, `scheduled-skill-runs`, `openapi`. The typed-skill library (`docs/product-plan/03-typed-skill-contract.md`) flows through the save/run/schedule/compiler modules; `openapi` generates the dynamic OpenAPI 3.1 document (`GET /api/v1/openapi.json`) that powers the TypeScript SDK (`packages/sdk`), Python SDK (`packages/sdk-python`), and MCP server (`packages/mcp`).
 - Pure graph: `packages/graph-core` (no I/O, tested in isolation).
-- OpenCode: `packages/agent-core` (ESM, `@opencode-ai/sdk`). The daemon loads it directly; the API keeps `importAgentCore()` (`new Function('return import(...)')`) for the few remaining synchronous paths (workflow-copilot, file-summarizer).
+- Agent runtimes: `packages/agent-core` (ESM). OpenCode uses `@opencode-ai/sdk`; Cursor Agent and Claude Code are CLI-backed adapters loaded by the native daemon. The API keeps `importAgentCore()` (`new Function('return import(...)')`) for the few remaining synchronous paths (workflow-copilot, file-summarizer).
 - Frontend: `apps/web` (Next.js 15 / React 19) consuming `packages/app-ui` (React Flow canvas), `packages/state` (Zustand), `packages/client-api` (HTTP + Socket.IO), `packages/ui-kit`, `packages/i18n`.
 - DB schema: `packages/db/prisma/schema.prisma` (Prisma 5.22).
 - Shared types/DTOs: `packages/shared-core`. Env validation: `packages/config` (Zod).
@@ -33,7 +33,7 @@ pnpm + Turborepo monorepo (`apps/*`, `packages/*`). Node ≥ 20.9, pnpm 9.x, Pos
 
 ## Agent runtimes (native daemon)
 
-Architecture inspired by Multica: all runtimes (OpenCode, cursor-agent, future CLIs) run **outside** containers, in the native daemon `apps/daemon`. The `docker-compose.prod.yml` stack is control plane only (Postgres + API + Web).
+Architecture inspired by Multica: all runtimes (OpenCode, cursor-agent, Claude Code, future CLIs) run **outside** containers, in the native daemon `apps/daemon`. The `docker-compose.prod.yml` stack is control plane only (Postgres + API + Web).
 
 Lifecycle:
 1. The API writes an `ExecutionJob` (`kind: agent_run` or `runtime_*`) to Postgres.
@@ -44,7 +44,7 @@ Lifecycle:
 
 To add a new runtime:
 1. Create/extend the adapter in `packages/agent-core/src/registry.ts` (`ADAPTERS`): the daemon consumes it via `runAgentStream`.
-2. If the runtime needs a locally installed CLI binary (e.g. `cursor-agent`), document the prerequisite in the README and add the check in `apps/daemon` (PATH discovery / version probe).
+2. If the runtime needs a locally installed CLI binary (e.g. `cursor-agent`, `claude`), document the prerequisite in the README and add the check in `apps/daemon` (PATH discovery / version probe).
 3. If the runtime exposes a long-running process (`runtime_start`), implement `prepareDaemonRuntimeStart` in `RuntimeService` and the corresponding spawn in the daemon `JobRunner`.
 
 No extra compose service / `Dockerfile.<name>` / shared volume is required: everything stays on the host.

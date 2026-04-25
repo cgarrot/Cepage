@@ -44,6 +44,7 @@ cepage config --json   # machine-readable
 cepage skills list [--kind workflow|prompt_only|workflow_template]
 cepage skills get <slug>
 cepage skills run <slug> [--input key=value]... [--inputs-file path.json] [--no-wait] [--timeout seconds]
+cepage skills dry-run <slug> [--input key=value]... [--inputs-file path.json] [--mode strict|permissive]
 cepage runs list [--skill <slug>] [--limit <n>]
 cepage runs get <id>
 cepage runs cancel <id>
@@ -63,6 +64,8 @@ cepage webhooks rotate-secret <id>
 cepage auth login [--api-url <url>] [--token <token>]
 cepage auth logout
 cepage config
+cepage hook install claude-code
+cepage hook install --uninstall claude-code
 ```
 
 ### Global flags
@@ -77,7 +80,7 @@ cepage config
 
 ## Typed inputs
 
-`--input key=value` can be passed multiple times. Values are best-effort JSON-decoded:
+`--input key=value` can be passed multiple times on `skills run`, `skills dry-run`, and schedule creation. Values are best-effort JSON-decoded:
 
 ```bash
 # Primitives get inferred types
@@ -99,6 +102,26 @@ cepage skills run ticket-classifier \
 cepage skills run big-import --inputs-file ./payload.json
 ```
 
+## Skill Compiler helpers
+
+`skills dry-run` validates a compiled skill before you spend model budget. It calls `POST /skill-compiler/dry-run`, checks required inputs, validates the JSON Schema, verifies graph integrity, and exits `1` when the report is `FAIL`.
+
+```bash
+cepage skills dry-run payment-integration \
+  --input payment_provider=paypal \
+  --input api_base_url=https://api.paypal.com
+
+# Treat warnings as failures
+cepage skills dry-run payment-integration --mode strict --inputs-file ./paypal.json
+```
+
+`hook install claude-code` writes `~/.claude/hooks/cepage-compile.sh`. The hook archives the completed Claude Code session and posts it to the Skill Compiler using the configured API URL, or `CEPAGE_API_URL` when set.
+
+```bash
+cepage hook install claude-code
+cepage hook install --uninstall claude-code
+```
+
 ## Examples
 
 ```bash
@@ -117,6 +140,12 @@ cepage schedules create --skill weekly-stripe-report \
 
 # Cancel a running skill
 cepage runs cancel run_abc123
+
+# Validate a compiled skill before publishing/running it
+cepage skills dry-run weekly-stripe-report --inputs-file ./inputs.json
+
+# Enable Claude Code post-session compilation
+cepage hook install claude-code
 
 # Subscribe to skill run events (the secret is shown ONCE; save it).
 cepage webhooks create \
@@ -155,7 +184,7 @@ The equivalent Python helper lives in `cepage.signature.verify_webhook_signature
 | Code | Meaning |
 | ---- | ------- |
 | 0    | Success (or in-flight status when `--no-wait`) |
-| 1    | Run failed / server returned a typed error |
+| 1    | Run failed, dry-run failed, or server returned a typed error |
 | 2    | Usage error (invalid args, missing required flags) |
 
 ## Development

@@ -41,14 +41,16 @@
     }
   },
   "scripts": {
+    "generate": "node scripts/generate.ts && node scripts/generate-skills.ts",
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src --max-warnings=0",
     "test": "pnpm build && node --test dist/__tests__/*.test.js"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.7",
+    "json-schema-to-typescript": "^15.0.4",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.7.3"
   },
   "publishConfig": {

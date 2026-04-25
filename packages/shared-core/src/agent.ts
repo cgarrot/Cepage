@@ -20,6 +20,9 @@ export const agentTypeSchema = z.enum([
 
 export type AgentType = z.infer<typeof agentTypeSchema>;
 
+export const VALID_COMPILER_AGENT_TYPES = ['opencode', 'cursor_agent', 'claude_code'] as const;
+export type ValidCompilerAgentType = (typeof VALID_COMPILER_AGENT_TYPES)[number];
+
 export const agentLifecycleSchema = z.enum([
   'pending',
   'booting',

@@ -8,3 +8,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Auto-generated types
+cepage/generated_types.py
+

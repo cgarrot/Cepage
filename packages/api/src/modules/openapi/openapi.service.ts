@@ -609,7 +609,11 @@ export class OpenapiService {
             {
               name: 'agentType',
               in: 'query',
-              schema: { type: 'string', enum: ['opencode', 'cursor'], default: 'opencode' },
+              schema: {
+                type: 'string',
+                enum: ['opencode', 'cursor_agent', 'claude_code'],
+                default: 'opencode',
+              },
             },
           ],
           responses: {

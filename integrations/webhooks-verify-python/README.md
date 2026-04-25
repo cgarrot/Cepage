@@ -26,7 +26,7 @@ cepage webhooks ping <id>
 
 Same scheme as the Node example. The shared helper is
 [`cepage.signature.verify_webhook_signature`](../../packages/sdk-python/cepage/signature.py)
-(ships with the `cepage-sdk` Python package). It:
+(ships with the `cepage` Python package). It:
 
 - Parses `v1,t=<unix>,sig=<hex>` into a dataclass
 - Checks the timestamp is within 5 minutes of `time.time()`

@@ -9,6 +9,7 @@ Use it from any Node 20+, Deno, Bun, or browser app to:
 - Stream live SSE events for a run (queued → running → succeeded/failed)
 - Manage scheduled skill runs (create, update, pause, run now)
 - Call the save-as-skill authoring endpoints on sessions
+- Consume generated per-skill types from Cepage's dynamic OpenAPI document
 
 The SDK has **zero runtime dependencies** — it's just a thin wrapper over the
 global `fetch` API — and ships with full TypeScript types for every request
@@ -52,8 +53,7 @@ as soon as the run is queued, and poll or stream yourself later.
 ## Typed inputs
 
 Use the generics on `skills.run<TInputs>()` to get full autocompletion and
-type safety. If you're consuming generated types from your skill catalog,
-wire them up like this:
+type safety:
 
 ```ts
 interface WeeklyStripeReportInputs {
@@ -66,6 +66,24 @@ const run = await cepage.skills.run<WeeklyStripeReportInputs>(
   { inputs: { startDate: '2026-04-14', endDate: '2026-04-21' } },
 );
 ```
+
+## Generated catalog types
+
+Cepage exposes a dynamic OpenAPI 3.1 document at `GET /api/v1/openapi.json`. The document contains the stable API schemas plus one generated `Inputs` / `Outputs` schema pair for every typed skill in the catalog.
+
+From the monorepo, generate TypeScript types and per-skill wrappers with:
+
+```bash
+pnpm --filter @cepage/sdk generate
+```
+
+The generator reads, in order:
+
+1. `CEPAGE_OPENAPI_PATH`, when set.
+2. `packages/sdk/.openapi-cache.json`, when present.
+3. `CEPAGE_OPENAPI_URL`, defaulting to `http://localhost:31947/api/v1/openapi.json`.
+
+It writes `src/generated/openapi.ts` and `src/generated/skills/index.ts`. The generated code is schema/types only; the hand-written transport, resources, errors, retries, and webhook verifier remain the public runtime surface.
 
 ## Streaming events
 
@@ -177,6 +195,7 @@ unchanged in Node 20+, Bun, Deno, Cloudflare Workers, and browsers.
 ## Development
 
 ```bash
+pnpm --filter @cepage/sdk generate
 pnpm --filter @cepage/sdk build
 pnpm --filter @cepage/sdk test
 pnpm --filter @cepage/sdk lint

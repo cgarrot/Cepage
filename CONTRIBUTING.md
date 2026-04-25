@@ -17,7 +17,7 @@ are the easiest to review and merge.
 - Node.js 20.9 or newer
 - pnpm 9.x
 - Docker Desktop or a local PostgreSQL 16 instance
-- OpenCode installed locally if you want to exercise the agent runtime end to end
+- OpenCode, `cursor-agent`, or `claude` installed locally if you want to exercise the matching agent runtime end to end
 
 ## Local setup
 
@@ -60,6 +60,8 @@ truth for committed schema changes.
 - `packages/graph-core`: graph model and invariants
 - `packages/state` and `packages/app-ui`: client state and canvas UI
 - `packages/db`: Prisma schema and database tooling
+- `packages/sdk`: TypeScript SDK, including dynamic OpenAPI/catalog type generation
+- `packages/sdk-python`: Python SDK and generated dataclass script
 - `docs/`: product and architecture notes
 - `status/`: current implementation notes and execution history
 
@@ -77,10 +79,20 @@ pnpm build
 `pnpm typecheck` currently uses the monorepo build graph because several
 packages validate TypeScript by compiling their workspace outputs.
 
+`pnpm build` runs package-level `generate` tasks through Turbo before compiling dependents. If you change the dynamic OpenAPI surface, skill catalog schemas, or generated SDK outputs, run:
+
+```bash
+pnpm --filter @cepage/sdk generate
+python packages/sdk-python/scripts/generate-python-sdk-types.py
+```
+
+Do not hand-edit files under `packages/sdk/src/generated/` or `packages/sdk-python/cepage/generated_types.py`.
+
 ## Documentation expectations
 
 - Keep the top-level `README.md` accurate for new contributors.
 - Link public-facing docs from `docs/README.md`.
+- Update relevant ADRs under `docs/adr/` when the SDK/codegen or compiler architecture changes.
 - If you add new environment variables, update `.env.example`.
 
 ## Security

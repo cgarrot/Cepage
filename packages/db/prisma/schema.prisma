@@ -17,6 +17,7 @@ model Session {
   lastEventId              Int      @default(0)
   workspaceParentDirectory String?
   workspaceDirectoryName   String?
+  metadata                 Json?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 

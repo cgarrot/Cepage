@@ -8,6 +8,7 @@ import { webhooksCommand } from './commands/webhooks.js';
 import { authCommand } from './commands/auth.js';
 import { configCommand } from './commands/config.js';
 import { importCommand } from './commands/import.js';
+import { hookCommand } from './commands/hook.js';
 import { UsageError } from './errors.js';
 
 const USAGE = `cepage — run and manage your Cepage skills.
@@ -19,6 +20,7 @@ Commands:
   skills list              List available skills (filesystem + user)
   skills get <slug>        Show a skill's schema and metadata
   skills run <slug>        Run a skill. Accepts --input key=value, --inputs-file path
+  skills dry-run <slug>    Validate a skill at zero cost. Accepts --input, --inputs-file
   run opencode             Run an OpenCode agent. Accepts --prompt, --capture, --auto-compile
   runs list                List recent skill runs
   runs get <id>            Show a run's inputs/outputs/status
@@ -35,9 +37,11 @@ Commands:
   webhooks rotate-secret <id>
                            Rotate the HMAC signing secret
    auth login               Save API URL + token to ~/.cepage/config.json
-   auth logout              Remove the saved config
-   config                   Print the effective config (tokens are redacted)
-   import cursor            Import a Cursor session as a compiled skill
+    auth logout              Remove the saved config
+    config                   Print the effective config (tokens are redacted)
+    import cursor            Import a Cursor session as a compiled skill
+    hook install claude-code  Install a Claude Code post-session hook
+    hook install --uninstall claude-code  Remove the Claude Code hook
 
 Global options:
   --api-url <url>          Override API base URL (default: http://localhost:31947/api/v1)
@@ -83,6 +87,8 @@ export async function runCli(argv: string[]): Promise<number> {
         return await configCommand(rest, globalValues);
       case 'import':
         return await importCommand(rest, globalValues);
+      case 'hook':
+        return await hookCommand(rest, globalValues);
       default:
         process.stderr.write(`cepage: unknown command "${command ?? ''}"\n\n`);
         process.stderr.write(USAGE);

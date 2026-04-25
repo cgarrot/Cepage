@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 
-import { CepageValidationError } from '@cepage/sdk';
+import { CepageHttpError, CepageValidationError } from '@cepage/sdk';
 
 import type { GlobalFlags } from '../main.js';
 import { createContext } from '../context.js';
@@ -21,6 +21,7 @@ const SUBCOMMAND_USAGE = `Usage:
   cepage skills list [--kind workflow|prompt_only|workflow_template]
   cepage skills get <slug>
   cepage skills run <slug> [--input key=value]... [--inputs-file path] [--no-wait]
+  cepage skills dry-run <slug> [--input key=value]... [--inputs-file path]
 `;
 
 export async function skillsCommand(argv: string[], flags: GlobalFlags): Promise<number> {
@@ -32,6 +33,8 @@ export async function skillsCommand(argv: string[], flags: GlobalFlags): Promise
       return getSkill(rest, flags);
     case 'run':
       return runSkill(rest, flags);
+    case 'dry-run':
+      return dryRun(rest, flags);
     case undefined:
     case '-h':
     case '--help':
@@ -172,6 +175,104 @@ async function runSkill(argv: string[], flags: GlobalFlags): Promise<number> {
         for (const detail of err.errors) {
           process.stderr.write(`  - ${detail.path ?? ''}: ${detail.message ?? ''}\n`);
         }
+      }
+      return 1;
+    }
+    throw err;
+  }
+}
+
+async function dryRun(argv: string[], flags: GlobalFlags): Promise<number> {
+  const parsed = parseArgs({
+    args: argv,
+    options: {
+      input: { type: 'string', multiple: true },
+      'inputs-file': { type: 'string' },
+      mode: { type: 'string' },
+    },
+    strict: true,
+    allowPositionals: true,
+  });
+
+  const slug = parsed.positionals[0];
+  if (!slug) throw new UsageError('skills dry-run requires a skill slug');
+
+  const { inputs } = await parseInputs({
+    inputsFile: parsed.values['inputs-file'] as string | undefined,
+    rawInputs: (parsed.values.input as string[] | undefined) ?? [],
+  });
+
+  const mode = parsed.values.mode;
+  if (
+    mode !== undefined &&
+    mode !== 'strict' &&
+    mode !== 'permissive'
+  ) {
+    throw new UsageError(`invalid --mode value "${mode}" (expected "strict" or "permissive")`);
+  }
+
+  const ctx = await createContext(flags);
+  const colors = makeColors(flags.color);
+
+  try {
+    const report = await ctx.client.http.request<{
+      overall: 'PASS' | 'FAIL';
+      checks: Record<string, 'PASS' | 'FAIL'>;
+      warnings: string[];
+      errors: Array<{ check: string; field?: string; message: string }>;
+      estimatedCost: number;
+    }>('POST', '/skill-compiler/dry-run', {
+      body: {
+        skillId: slug,
+        inputs,
+        mode,
+      } as unknown,
+    });
+
+    if (flags.json) {
+      emitJson(report);
+      return report.overall === 'PASS' ? 0 : 1;
+    }
+
+    const overallTone = report.overall === 'PASS' ? 'ok' : 'err';
+    emitLine(emitStatus(report.overall, overallTone, colors));
+
+    if (Object.keys(report.checks).length > 0) {
+      emitLine();
+      for (const [name, result] of Object.entries(report.checks)) {
+        const checkTone = result === 'PASS' ? 'ok' : 'err';
+        emitLine(`  ${emitStatus(result, checkTone, colors)}  ${name}`);
+      }
+    }
+
+    if (report.warnings.length > 0) {
+      emitLine();
+      emitLine(colors.yellow(`${report.warnings.length} warning(s)`));
+      for (const w of report.warnings) {
+        emitLine(`  - ${w}`);
+      }
+    }
+
+    if (report.errors.length > 0) {
+      emitLine();
+      emitLine(colors.red(`${report.errors.length} error(s)`));
+      for (const e of report.errors) {
+        emitLine(`  - ${e.check}${e.field ? ` (${e.field})` : ''}: ${e.message}`);
+      }
+    }
+
+    if (report.estimatedCost > 0) {
+      emitLine();
+      emitLine(`${colors.dim('estimated cost')}: ${report.estimatedCost}`);
+    }
+
+    return report.overall === 'PASS' ? 0 : 1;
+  } catch (err) {
+    if (err instanceof CepageHttpError && err.status === 404) {
+      if (flags.json) {
+        emitJson({ error: { code: 'SKILL_NOT_FOUND', message: err.message } });
+      } else {
+        process.stderr.write(colors.red(`skill not found: ${slug}\n`));
       }
       return 1;
     }

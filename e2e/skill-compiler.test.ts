@@ -8,6 +8,8 @@ import { NotFoundException } from '../packages/api/node_modules/@nestjs/common/i
 import { CompilerService } from '../packages/api/dist/modules/skill-compiler/compiler/compiler.service.js';
 import { OpencodeExtractorService } from '../packages/api/dist/modules/skill-compiler/extractors/opencode-extractor.service.js';
 import { CursorExtractorService } from '../packages/api/dist/modules/skill-compiler/extractors/cursor-extractor.service.js';
+import { ClaudeCodeExtractorService } from '../packages/api/dist/modules/skill-compiler/extractors/claude-code-extractor.service.js';
+import { SessionExtractorService } from '../packages/api/dist/modules/skill-compiler/session-extractor.service.js';
 import { GraphMapperService } from '../packages/api/dist/modules/skill-compiler/graph-mapper.service.js';
 import { ParametrizerService } from '../packages/api/dist/modules/skill-compiler/parametrizer/parametrizer.service.js';
 import { SchemaInferenceService } from '../packages/api/dist/modules/skill-compiler/schema-inference/schema-inference.service.js';
@@ -71,9 +73,14 @@ interface Pipeline {
 function createPipeline(): Pipeline {
   const userSkills = new InMemoryUserSkillsService();
 
-  const compiler = new CompilerService(
+  const sessionExtractor = new SessionExtractorService(
     new OpencodeExtractorService(),
     new CursorExtractorService(),
+    new ClaudeCodeExtractorService(),
+  );
+
+  const compiler = new CompilerService(
+    sessionExtractor,
     new GraphMapperService(),
     new ParametrizerService(),
     new SchemaInferenceService(),

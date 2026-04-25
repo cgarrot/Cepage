@@ -8,6 +8,8 @@ import type { UserSkillRow } from '../../user-skills/user-skills.dto.js';
 import { CompilerService } from '../compiler/compiler.service.js';
 import { CursorExtractorService } from '../extractors/cursor-extractor.service.js';
 import { OpencodeExtractorService } from '../extractors/opencode-extractor.service.js';
+import { ClaudeCodeExtractorService } from '../extractors/claude-code-extractor.service.js';
+import { SessionExtractorService } from '../session-extractor.service.js';
 import { GraphMapperService } from '../graph-mapper.service.js';
 import { ParametrizerService } from '../parametrizer/parametrizer.service.js';
 import { SchemaInferenceService } from '../schema-inference/schema-inference.service.js';
@@ -39,9 +41,14 @@ function createCompiler(overrides?: {
       create(input: Record<string, unknown>): Promise<UserSkillRow>;
     });
 
-  return new CompilerService(
+  const sessionExtractor = new SessionExtractorService(
     opencodeExtractor,
     cursorExtractor as CursorExtractorService,
+    new ClaudeCodeExtractorService(),
+  );
+
+  return new CompilerService(
+    sessionExtractor,
     new GraphMapperService(),
     new ParametrizerService(),
     new SchemaInferenceService(),
@@ -187,7 +194,7 @@ test('compile publishes a cursor session and generates a unique slug', async () 
 
     const result = await service.compile({
       sessionId: 'sess-cursor-1',
-      agentType: 'cursor',
+      agentType: 'cursor_agent',
       mode: 'publish',
       sessionData: cursorDbPath,
     });
@@ -210,8 +217,8 @@ test('compile rejects missing session data early', async () => {
   const service = createCompiler();
 
   await assert.rejects(
-    () => service.compile({ sessionId: 'sess-1', agentType: 'cursor', mode: 'draft' }),
-    /SKILL_COMPILER_SESSION_DATA_REQUIRED:cursor/,
+    () => service.compile({ sessionId: 'sess-1', agentType: 'cursor_agent', mode: 'draft' }),
+    /SKILL_COMPILER_SESSION_DATA_REQUIRED:cursor_agent/,
   );
 });
 
@@ -222,7 +229,7 @@ test('compile rejects session paths outside allowed roots', async () => {
     () =>
       service.compile({
         sessionId: 'sess-unsafe',
-        agentType: 'cursor',
+        agentType: 'cursor_agent',
         mode: 'draft',
         sessionData: '/etc/hosts',
       }),

@@ -5,10 +5,10 @@ import { cursorAgentSpawnEnv, parseCursorModelsOutput, resolveCursorAgentBin } f
 import { buildOpenCodeBaseUrl, parseOpenCodeModelsOutput } from '../opencode-run.js';
 import { listAgentAdapters } from '../registry.js';
 
-test('listAgentAdapters exposes opencode and cursor agent adapters', () => {
+test('listAgentAdapters exposes opencode, cursor agent, and claude code adapters', () => {
   assert.deepEqual(
     listAgentAdapters().map((adapter) => adapter.type),
-    ['opencode', 'cursor_agent'],
+    ['opencode', 'cursor_agent', 'claude_code'],
   );
 });
 

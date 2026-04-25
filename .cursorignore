@@ -1,0 +1,3 @@
+# Local-only docs (see docs/.gitignore)
+docs/product-plan/
+docs/workflow-prompt-library/beta-test/

@@ -20,6 +20,8 @@ import { UserSkillsModule } from './modules/user-skills/user-skills.module';
 import { SkillRunsModule } from './modules/skill-runs/skill-runs.module';
 import { SkillAuthoringModule } from './modules/skill-authoring/skill-authoring.module';
 import { SkillCompilerModule } from './modules/skill-compiler/skill-compiler.module';
+import { SessionAnalysisModule } from './modules/session-analysis/session-analysis.module';
+import { SkillMiningModule } from './modules/skill-mining/skill-mining.module';
 import { OpenapiModule } from './modules/openapi/openapi.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { ValidationModule } from './common/validation/validation.module';
@@ -52,6 +54,8 @@ import { ValidationModule } from './common/validation/validation.module';
     SkillRunsModule,
     SkillAuthoringModule,
     SkillCompilerModule,
+    SessionAnalysisModule,
+    SkillMiningModule,
     OpenapiModule,
     WebhooksModule,
   ],

@@ -44,7 +44,7 @@ notes:
   Desktop, Hermes CLI, OpenClaw extensions). It spawns the `@cepage/mcp`
   binary as a subprocess and talks to it over stdin/stdout. No HTTP
   exposure is needed.
-- **The HTTP API** (with the `@cepage/sdk` / `cepage-sdk` clients, or
+- **The HTTP API** (with the `@cepage/sdk` / `cepage` clients, or
   raw `curl`) is the right call from server-side agents, cron jobs,
   CI pipelines, or webhook handlers.
 - **Outbound webhooks** are how Cepage pushes run lifecycle events into

@@ -75,6 +75,16 @@ except CepageValidationError as err:
         print(detail.path, detail.message)
 ```
 
+## Generated skill dataclasses
+
+Cepage's OpenAPI document is dynamic: every typed skill contributes its own `<Slug>Inputs` and `<Slug>Outputs` schemas. The Python SDK keeps the HTTP client hand-written, but can generate local stdlib dataclasses for those dynamic schemas:
+
+```bash
+python packages/sdk-python/scripts/generate-python-sdk-types.py
+```
+
+By default the script reads `packages/sdk/.openapi-cache.json`. Override it with `OPENAPI_SPEC_PATH=/path/to/openapi.json`. The output is `cepage/generated_types.py`, which is ignored by git because it depends on the active skill catalog for the instance you generated from.
+
 ## Scheduling
 
 ```python
@@ -159,6 +169,7 @@ available as `err.body` for custom handling.
 cd packages/sdk-python
 uv venv
 uv pip install -e ".[dev]"
+python scripts/generate-python-sdk-types.py
 pytest
 ruff check .
 mypy cepage

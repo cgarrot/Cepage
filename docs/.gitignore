@@ -1,25 +1,16 @@
-# Ignore all internal product specs — not for open source
-00-*.md
-01-*.md
-02-*.md
-03-*.md
-04-*.md
-05-*.md
-06-*.md
-07-*.md
-08-*.md
-09-*.md
-10-*.md
+# Local / internal documentation under docs/ should stay out of git.
+# Tracked exceptions:
+# - getting-started-compiler.md — public compiler guide linked from the root README
+# - workflow-prompt-library/** — shipped workflow catalog (loaded at runtime by
+#   packages/api/src/modules/workflow-skills/workflow-skills.service.ts)
+# - this file — so contributors share the same ignore rules
 
-# Ignore internal directories
-status/
+**
+!/.gitignore
+!/getting-started-compiler.md
+!/workflow-prompt-library/
+!/workflow-prompt-library/**
 
-# Ignore private content
-workflow-prompt-library/private/
-
-# Keep the public workflow prompt library (used by code)
-!workflow-prompt-library/
-!workflow-prompt-library/**/*
-
-# Keep the root README (public index)
-!README.md
+# Internal PRD / beta collateral — local only, not shipped
+product-plan/
+workflow-prompt-library/beta-test/

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   formatAgentSelectionLabel,
@@ -13,6 +13,7 @@ import {
 import { PrismaService } from '../../../common/database/prisma.service';
 import { ActivityService } from '../../activity/activity.service';
 import { RunArtifactsService } from '../../agents/run-artifacts.service';
+import { WorkflowManagedFlowNotifierService } from '../../agents/workflow-managed-flow-notifier.service';
 import { CollaborationBusService } from '../../collaboration/collaboration-bus.service';
 import { RuntimeService } from '../../runtime/runtime.service';
 import {
@@ -173,6 +174,8 @@ export class DaemonDispatchService {
     private readonly runtime: RuntimeService,
     private readonly supervisor: RunSupervisorService,
     private readonly artifacts: RunArtifactsService,
+    @Optional()
+    private readonly flowNotifier?: WorkflowManagedFlowNotifierService,
   ) {}
 
   async claimNextJobForDaemon(
@@ -1077,6 +1080,7 @@ export class DaemonDispatchService {
       timestamp: new Date().toISOString(),
       payload,
     });
+    this.flowNotifier?.notifyAgentStatus(ctx.payload.sessionId, payload);
   }
 }
 

@@ -33,7 +33,7 @@ You ──► Cepage canvas ──┬──► Cursor   (refactor)
 - **Live and bidirectional.** Agents stream their work into the canvas as they go. Humans can edit, override, or contradict any node mid-run.
 - **Time-travel.** Replay any session step by step. Branch from any past state.
 - **Skill Library.** Save any session as a reusable workflow with typed inputs/outputs (JSON Schema). Run it from the UI via an auto-form, from the API, on a schedule (cron), or from a global Cmd/Ctrl+K palette. Every run streams progress back over SSE and lands in a searchable history.
-- **Skill Compiler.** Turn a Cursor or OpenCode session into a compiled, parameterized skill. Extract the execution graph, replace hardcoded values with typed parameters, dry-run at zero cost, and reuse the same workflow for different inputs.
+- **Skill Compiler.** Turn a Cursor, OpenCode, or Claude Code session into a compiled, parameterized skill. Extract the execution graph, replace hardcoded values with typed parameters, dry-run at zero cost, and reuse the same workflow for different inputs.
 
 ### Pronounced *say-pahzh*
 
@@ -58,7 +58,7 @@ Install is one curl command, or one prompt to your favourite coding agent. See [
 | ----------------------- | --------------------- | --------------------------------------------------------------------------- |
 | OpenCode                | Available             | Spawned via the OpenCode runtime, full streaming.                           |
 | Cursor Agent            | Available             | Spawned as a CLI process. Requires `CURSOR_API_KEY`.                        |
-| Claude Code             | Planned               | Adapter contract is ready, integration in progress.                         |
+| Claude Code             | Available             | Spawned via the `claude` CLI; supports catalog discovery, streaming, and compiler hooks. |
 | Codex                   | Planned               | Coming after Claude Code.                                                   |
 | Aider, Continue, custom | Contributions welcome | The adapter contract lives in `[packages/agent-core](packages/agent-core)`. |
 
@@ -96,7 +96,7 @@ flags (`--no-open`, `--no-start`, `--yes`).
 
 ### Option 3 — Manual (for the curious)
 
-**Requirements**: Node 20.9+, pnpm 9+, Docker, git, plus the agent CLIs you want to spawn (OpenCode, `cursor-agent`, …) installed locally.
+**Requirements**: Node 20.9+, pnpm 9+, Docker, git, plus the agent CLIs you want to spawn (OpenCode, `cursor-agent`, `claude`, …) installed locally.
 
 ```bash
 git clone https://github.com/cgarrot/Cepage cepage && cd cepage
@@ -182,7 +182,7 @@ Three layers, kept intentionally small:
 
 1. **The canvas** (`apps/web` + `packages/app-ui`) — a React Flow surface where every node is typed (human prompt, agent run, draft, contradiction, request) and every edge has a meaning (`spawned`, `replies-to`, `contradicts`, `merges`).
 2. **The graph engine** (`packages/graph-core` + `packages/api`) — a NestJS backend that owns sessions, nodes, edges, runtime events, and replays them through Socket.IO. Pure graph logic stays in `graph-core`, no I/O.
-3. **The agent layer** (`packages/agent-core` + `apps/daemon`) — a thin adapter contract. Each agent (OpenCode, Cursor, Claude Code, …) plugs in by implementing `discoverCatalog` + `run`. The native daemon polls the API in localhost, claims `agent_run` / `runtime_*` jobs, spawns the underlying CLI/runtime on the host, and streams events back to the API in 500 ms batches. The API itself never spawns agents — it just stores and dispatches.
+3. **The agent layer** (`packages/agent-core` + `apps/daemon`) — a thin adapter contract. Each agent (OpenCode, Cursor Agent, Claude Code, …) plugs in by implementing `discoverCatalog` + `run`. The native daemon polls the API in localhost, claims `agent_run` / `runtime_*` jobs, spawns the underlying CLI/runtime on the host, and streams events back to the API in 500 ms batches. The API itself never spawns agents — it just stores and dispatches.
 
 That's it. No vendor lock-in, no proprietary protocol. If you can run an agent, you can wire it into Cepage.
 
@@ -260,7 +260,7 @@ See [`apps/cli/README.md`](apps/cli/README.md) for every command and flag.
 
 The Skill Compiler turns one-off agent sessions into reusable, typed skills.
 
-After Cursor or OpenCode finishes a task, you send the session to Cepage. Cepage extracts the execution graph, replaces concrete values like "Stripe" with typed parameters like `{{payment_provider}}`, runs a zero-cost dry-run validation, and emits a skill you can call from the CLI, SDK, or any MCP client.
+After Cursor, OpenCode, or Claude Code finishes a task, you send the session to Cepage. Cepage extracts the execution graph, replaces concrete values like "Stripe" with typed parameters like `{{payment_provider}}`, runs a zero-cost dry-run validation, and emits a skill you can call from the CLI, SDK, or any MCP client.
 
 **How it works in 30 seconds:**
 
@@ -270,6 +270,9 @@ cepage import cursor --latest
 
 # Capture an OpenCode session
 cepage run opencode --capture --prompt "Build a Stripe integration"
+
+# Auto-compile Claude Code sessions after they finish
+cepage hook install claude-code
 
 # Review parameters in the browser, then dry-run
 cepage skills dry-run payment-integration --input payment_provider=paypal
@@ -283,6 +286,7 @@ cepage skills run payment-integration --input payment_provider=paypal --input ap
 - **Extract** — Parse transcripts, diffs, and tool calls into a canonical execution graph.
 - **Parameterize** — Replace hardcoded values with typed placeholders and a JSON Schema.
 - **Validate** — Dry-run with a mock LLM in an isolated worktree. Costs $0. Catches structural errors before publication.
+- **Distribute** — The dynamic OpenAPI document exposes per-skill input/output schemas, and the SDK generators turn those schemas into TypeScript and Python types.
 - **Reuse** — Run the skill from the Library UI, CLI, TypeScript SDK, Python SDK, or any MCP-compatible agent.
 
 See the full guide: [Getting Started with the Skill Compiler](docs/getting-started-compiler.md).
@@ -293,8 +297,8 @@ See the full guide: [Getting Started with the Skill Compiler](docs/getting-start
 
 Honest list of what's next, roughly in order:
 
-- **Claude Code adapter**
 - **Codex adapter**
+- **Polish Claude Code hook import UX**
 - **Real auth** (drop the `local-user` shim)
 - **Hosted demo** — a public canvas you can poke at without installing
 - **Native binary install** — single-file binary for users who don't want Node + Docker on their machine

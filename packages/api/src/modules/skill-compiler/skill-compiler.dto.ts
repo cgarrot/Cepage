@@ -1,11 +1,12 @@
 import { IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import type { ValidCompilerAgentType } from '@cepage/shared-core';
 
 export class CompileSkillDto {
   @IsString()
   sessionId!: string;
 
-  @IsIn(['opencode', 'cursor'])
-  agentType!: 'opencode' | 'cursor';
+  @IsIn(['opencode', 'cursor_agent', 'claude_code'])
+  agentType!: ValidCompilerAgentType;
 
   @IsIn(['draft', 'publish'])
   mode!: 'draft' | 'publish';
@@ -33,8 +34,8 @@ export class DryRunDto {
 
 export class PreviewQueryDto {
   @IsOptional()
-  @IsIn(['opencode', 'cursor'])
-  agentType?: 'opencode' | 'cursor';
+  @IsIn(['opencode', 'cursor_agent', 'claude_code'])
+  agentType?: ValidCompilerAgentType;
 
   @IsOptional()
   @IsString()
